@@ -1,0 +1,42 @@
+<view class="page">
+  <view class="hero">
+    <view class="hero-title">DocAI 智能文档处理系统</view>
+    <view class="hero-desc">整合 AI 大模型，支持文档管理、信息提取、智能填表与公文写作</view>
+  </view>
+
+  <view class="stats-grid">
+    <view class="stat-card">
+      <view class="stat-value">{{stats.total}}</view>
+      <view class="stat-label">总文档数</view>
+    </view>
+    <view class="stat-card">
+      <view class="stat-value">{{stats.docx}}</view>
+      <view class="stat-label">Word 文档</view>
+    </view>
+    <view class="stat-card">
+      <view class="stat-value">{{stats.xlsx}}</view>
+      <view class="stat-label">Excel 文档</view>
+    </view>
+    <view class="stat-card">
+      <view class="stat-value">{{stats.txt + stats.md}}</view>
+      <view class="stat-label">文本文件</view>
+    </view>
+  </view>
+
+  <view class="section-title">快速入口</view>
+  <view class="action-list">
+    <button class="action-btn" bindtap="goDocuments">文档管理</button>
+    <button class="action-btn" bindtap="goAutoFill">智能填表</button>
+    <button class="action-btn" bindtap="goChat">AI 对话</button>
+    <button class="action-btn" bindtap="goGenerate">AI 写作</button>
+  </view>
+
+  <view class="section-title">核心流程</view>
+  <view class="flow-box">
+    <view class="flow-item">1. 上传文档</view>
+    <view class="flow-item">2. AI 提取信息</view>
+    <view class="flow-item">3. 上传模板</view>
+    <view class="flow-item">4. 自动填表</view>
+    <view class="flow-item">5. 下载结果</view>
+  </view>
+</view>

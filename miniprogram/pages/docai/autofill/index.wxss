@@ -1,0 +1,54 @@
+.page {
+  min-height: 100vh;
+  background: #f5f7fb;
+  padding: 20rpx;
+  box-sizing: border-box;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 14rpx;
+}
+
+.title {
+  color: #1e293b;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.title.small {
+  font-size: 30rpx;
+}
+
+.desc {
+  margin-top: 10rpx;
+  color: #64748b;
+  font-size: 25rpx;
+  line-height: 1.7;
+}
+
+.btn {
+  margin-top: 14rpx;
+  border-radius: 12rpx;
+}
+
+.btn.primary {
+  margin-top: 18rpx;
+}
+
+.file-name {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: #334155;
+}
+
+.result {
+  margin-top: 10rpx;
+  display: block;
+  font-size: 24rpx;
+  color: #334155;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

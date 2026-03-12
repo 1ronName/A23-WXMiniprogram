@@ -1,0 +1,35 @@
+<view class="page">
+  <view class="toolbar">
+    <input class="search" placeholder="搜索文档名称" value="{{keyword}}" bindinput="onKeywordInput" />
+    <picker mode="selector" range="{{typeOptions}}" value="{{typeIndex}}" bindchange="onTypeChange">
+      <view class="picker">{{typeOptions[typeIndex]}}</view>
+    </picker>
+    <button class="mini" size="mini" bindtap="loadDocuments">查询</button>
+  </view>
+
+  <view class="actions">
+    <button class="action" type="primary" bindtap="chooseAndUpload">上传文档</button>
+    <button class="action" bindtap="loadDocuments">刷新</button>
+  </view>
+
+  <view class="summary">共 {{documents.length}} 条（仅展示当前查询结果）</view>
+
+  <scroll-view class="list" scroll-y="true">
+    <view wx:if="{{loading}}" class="empty">加载中...</view>
+    <view wx:elif="{{documents.length === 0}}" class="empty">暂无文档</view>
+
+    <view wx:for="{{documents}}" wx:key="id" class="item">
+      <view class="row-top">
+        <view class="title">{{item.title}}</view>
+        <view class="tag">{{item.fileType}}</view>
+      </view>
+      <view class="meta">{{item.createdAtText}} · {{item.fileSizeText}}</view>
+
+      <view class="row-actions">
+        <button size="mini" data-index="{{index}}" bindtap="previewDoc">预览</button>
+        <button size="mini" data-index="{{index}}" bindtap="openInChat">对话</button>
+        <button size="mini" type="warn" data-id="{{item.id}}" bindtap="deleteDoc">删除</button>
+      </view>
+    </view>
+  </scroll-view>
+</view>

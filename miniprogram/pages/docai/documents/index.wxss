@@ -1,0 +1,109 @@
+.page {
+  min-height: 100vh;
+  background: #f5f7fb;
+  padding: 20rpx;
+  box-sizing: border-box;
+}
+
+.toolbar {
+  display: flex;
+  gap: 10rpx;
+  align-items: center;
+}
+
+.search {
+  flex: 1;
+  height: 72rpx;
+  background: #ffffff;
+  border-radius: 12rpx;
+  padding: 0 16rpx;
+  border: 1rpx solid #dbe4ff;
+}
+
+.picker {
+  min-width: 150rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  background: #ffffff;
+  border-radius: 12rpx;
+  border: 1rpx solid #dbe4ff;
+  text-align: center;
+  padding: 0 12rpx;
+  color: #334155;
+}
+
+.mini {
+  margin: 0;
+}
+
+.actions {
+  margin-top: 14rpx;
+  display: flex;
+  gap: 12rpx;
+}
+
+.action {
+  flex: 1;
+  margin: 0;
+  border-radius: 14rpx;
+}
+
+.summary {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: #5f6c85;
+}
+
+.list {
+  margin-top: 12rpx;
+  height: calc(100vh - 300rpx);
+}
+
+.item {
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 18rpx;
+  margin-bottom: 12rpx;
+}
+
+.row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.title {
+  font-size: 30rpx;
+  color: #1f2a44;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  font-size: 22rpx;
+  color: #336dff;
+  background: #eaf0ff;
+  border-radius: 999rpx;
+  padding: 4rpx 14rpx;
+}
+
+.meta {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #5f6c85;
+}
+
+.row-actions {
+  margin-top: 12rpx;
+  display: flex;
+  gap: 10rpx;
+}
+
+.empty {
+  text-align: center;
+  color: #6b7280;
+  padding-top: 120rpx;
+}

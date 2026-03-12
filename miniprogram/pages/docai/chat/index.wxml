@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="doc-context" wx:if="{{currentDoc.id}}">
+    <view class="doc-name">已关联文档：{{currentDoc.title}}</view>
+    <button size="mini" bindtap="clearDoc">取消关联</button>
+  </view>
+
+  <scroll-view scroll-y="true" class="messages" scroll-into-view="{{scrollIntoView}}">
+    <view wx:for="{{messages}}" wx:key="id" id="msg-{{item.id}}" class="msg {{item.role}}">
+      <view class="bubble">{{item.content}}</view>
+    </view>
+  </scroll-view>
+
+  <view class="input-bar">
+    <textarea
+      class="input"
+      maxlength="2000"
+      value="{{inputText}}"
+      bindinput="onInput"
+      placeholder="输入你的问题"
+    />
+    <button class="send" type="primary" loading="{{loading}}" bindtap="sendMessage">发送</button>
+  </view>
+</view>

@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="brand">
+    <view class="title">DocAI</view>
+    <view class="subtitle">智能文档处理系统</view>
+  </view>
+
+  <view class="card">
+    <view class="tabs">
+      <view class="tab {{isLogin ? 'active' : ''}}" data-login="true" bindtap="switchMode">登录</view>
+      <view class="tab {{!isLogin ? 'active' : ''}}" data-login="false" bindtap="switchMode">注册</view>
+    </view>
+
+    <input class="input" placeholder="用户名" value="{{username}}" bindinput="onUsernameInput" />
+
+    <input wx:if="{{!isLogin}}" class="input" placeholder="昵称（可选）" value="{{nickname}}" bindinput="onNicknameInput" />
+
+    <input class="input" password placeholder="密码" value="{{password}}" bindinput="onPasswordInput" />
+
+    <input wx:if="{{!isLogin}}" class="input" password placeholder="确认密码" value="{{confirmPassword}}" bindinput="onConfirmPasswordInput" />
+
+    <button class="submit" type="primary" loading="{{loading}}" bindtap="submit">
+      {{isLogin ? '登录' : '注册'}}
+    </button>
+  </view>
+</view>

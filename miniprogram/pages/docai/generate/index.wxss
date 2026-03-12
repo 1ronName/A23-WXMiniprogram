@@ -1,0 +1,65 @@
+.page {
+  min-height: 100vh;
+  background: #f5f7fb;
+  padding: 20rpx;
+  box-sizing: border-box;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 22rpx;
+  margin-bottom: 14rpx;
+}
+
+.label {
+  color: #334155;
+  font-size: 26rpx;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.picker,
+.input,
+.textarea {
+  width: 100%;
+  border: 1rpx solid #dbe4ff;
+  border-radius: 12rpx;
+  background: #f8faff;
+  box-sizing: border-box;
+  font-size: 26rpx;
+  color: #0f172a;
+}
+
+.picker {
+  height: 72rpx;
+  line-height: 72rpx;
+  padding: 0 16rpx;
+  margin-bottom: 14rpx;
+}
+
+.input {
+  height: 72rpx;
+  padding: 0 16rpx;
+  margin-bottom: 14rpx;
+}
+
+.textarea {
+  min-height: 180rpx;
+  padding: 14rpx;
+  margin-bottom: 14rpx;
+}
+
+.output {
+  min-height: 360rpx;
+}
+
+.btn {
+  margin-top: 8rpx;
+  border-radius: 12rpx;
+}
+
+.actions {
+  display: flex;
+  gap: 10rpx;
+}

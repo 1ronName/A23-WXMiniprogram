@@ -1,0 +1,86 @@
+.page {
+  min-height: 100vh;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background: #f5f7fb;
+}
+
+.hero {
+  padding: 28rpx;
+  border-radius: 24rpx;
+  color: #ffffff;
+  background: linear-gradient(135deg, #386bff 0%, #1b42b8 100%);
+  box-shadow: 0 12rpx 26rpx rgba(31, 58, 147, 0.22);
+}
+
+.hero-title {
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.hero-desc {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  line-height: 1.5;
+  opacity: 0.95;
+}
+
+.stats-grid {
+  margin-top: 20rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.stat-card {
+  background: #ffffff;
+  border-radius: 18rpx;
+  padding: 20rpx;
+}
+
+.stat-value {
+  color: #2452d9;
+  font-size: 42rpx;
+  font-weight: 700;
+}
+
+.stat-label {
+  margin-top: 8rpx;
+  color: #5f6c85;
+  font-size: 24rpx;
+}
+
+.section-title {
+  margin-top: 24rpx;
+  margin-bottom: 14rpx;
+  color: #2a385a;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.action-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.action-btn {
+  margin: 0;
+  border-radius: 16rpx;
+  border: 1rpx solid #d8e2ff;
+  background: #ffffff;
+  color: #2449bf;
+  font-size: 28rpx;
+}
+
+.flow-box {
+  background: #ffffff;
+  border-radius: 18rpx;
+  padding: 16rpx 20rpx;
+}
+
+.flow-item {
+  font-size: 26rpx;
+  color: #334155;
+  line-height: 1.9;
+}

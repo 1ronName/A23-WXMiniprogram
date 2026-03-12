@@ -1,0 +1,69 @@
+.page {
+  min-height: 100vh;
+  padding: 48rpx 32rpx;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, #eef3ff 0%, #f8fbff 100%);
+}
+
+.brand {
+  margin-top: 80rpx;
+  margin-bottom: 48rpx;
+}
+
+.title {
+  font-size: 64rpx;
+  color: #2347c9;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin-top: 12rpx;
+  color: #5b6377;
+  font-size: 28rpx;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 14rpx 32rpx rgba(51, 79, 155, 0.08);
+}
+
+.tabs {
+  display: flex;
+  background: #f2f5fd;
+  border-radius: 999rpx;
+  padding: 6rpx;
+  margin-bottom: 28rpx;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  border-radius: 999rpx;
+  color: #64748b;
+  font-size: 28rpx;
+}
+
+.tab.active {
+  background: #ffffff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.input {
+  height: 84rpx;
+  background: #f8faff;
+  border: 1rpx solid #dbe4ff;
+  border-radius: 12rpx;
+  padding: 0 22rpx;
+  margin-bottom: 18rpx;
+  font-size: 28rpx;
+}
+
+.submit {
+  margin-top: 16rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #336dff 0%, #1d4ed8 100%);
+}
