@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "AI 对话"
+  "navigationBarTitleText": "AI 对话",
+  "navigationBarBackgroundColor": "#ffffff",
+  "navigationBarTextStyle": "black"
 }

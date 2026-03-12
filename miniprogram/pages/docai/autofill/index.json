@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "智能填表"
+  "navigationBarTitleText": "智能填表",
+  "navigationBarBackgroundColor": "#ffffff",
+  "navigationBarTextStyle": "black"
 }

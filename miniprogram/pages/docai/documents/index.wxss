@@ -36,6 +36,28 @@
   margin: 0;
 }
 
+.primary-btn {
+  background: linear-gradient(135deg, #356cff 0%, #2251cb 100%);
+  color: #ffffff;
+  border: 0;
+}
+
+.secondary-btn {
+  background: #eff4ff;
+  color: #2d55cf;
+  border: 1rpx solid #cddcff;
+}
+
+.row-btn {
+  margin: 0;
+}
+
+.primary-btn::after,
+.secondary-btn::after,
+.row-btn::after {
+  border: 0;
+}
+
 .actions {
   margin-top: 14rpx;
   display: flex;

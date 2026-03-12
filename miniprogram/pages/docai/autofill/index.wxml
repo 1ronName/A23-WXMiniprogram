@@ -3,10 +3,10 @@
     <view class="title">上传模板并智能预览</view>
     <view class="desc">小程序端使用预览模式验证模板和数据源匹配情况，服务端会返回填表耗时和基础统计（默认自动选取前 5 个文档作为数据源）。</view>
 
-    <button class="btn" bindtap="chooseTemplate">选择模板文件</button>
+    <button class="btn secondary-btn" bindtap="chooseTemplate">选择模板文件</button>
     <view wx:if="{{templateName}}" class="file-name">已选模板：{{templateName}}</view>
 
-    <button class="btn primary" type="primary" loading="{{loading}}" bindtap="startFill">开始预览</button>
+    <button class="btn primary-btn" loading="{{loading}}" bindtap="startFill">开始预览</button>
   </view>
 
   <view class="card" wx:if="{{resultText}}">

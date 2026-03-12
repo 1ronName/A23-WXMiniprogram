@@ -30,19 +30,21 @@ Page({
     }
   },
 
-  goDocuments() {
-    wx.switchTab({ url: '/pages/docai/documents/index' })
-  },
-
-  goAutoFill() {
-    wx.switchTab({ url: '/pages/docai/autofill/index' })
-  },
-
-  goChat() {
-    wx.switchTab({ url: '/pages/docai/chat/index' })
-  },
-
-  goGenerate() {
-    wx.switchTab({ url: '/pages/docai/generate/index' })
+  logout() {
+    wx.showModal({
+      title: '退出登录',
+      content: '确认退出当前账号吗？',
+      success: (res) => {
+        if (!res.confirm) {
+          return
+        }
+        const app = getApp()
+        if (app && app.clearAuth) {
+          app.clearAuth()
+        }
+        wx.removeStorageSync('docai_current_doc')
+        wx.reLaunch({ url: '/pages/docai/login/index' })
+      },
+    })
   },
 })

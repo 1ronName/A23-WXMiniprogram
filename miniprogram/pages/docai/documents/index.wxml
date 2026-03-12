@@ -4,12 +4,12 @@
     <picker mode="selector" range="{{typeOptions}}" value="{{typeIndex}}" bindchange="onTypeChange">
       <view class="picker">{{typeOptions[typeIndex]}}</view>
     </picker>
-    <button class="mini" size="mini" bindtap="loadDocuments">查询</button>
+    <button class="mini secondary-btn" size="mini" bindtap="loadDocuments">查询</button>
   </view>
 
   <view class="actions">
-    <button class="action" type="primary" bindtap="chooseAndUpload">上传文档</button>
-    <button class="action" bindtap="loadDocuments">刷新</button>
+    <button class="action primary-btn" bindtap="chooseAndUpload">上传文档</button>
+    <button class="action secondary-btn" bindtap="loadDocuments">刷新</button>
   </view>
 
   <view class="summary">共 {{documents.length}} 条（仅展示当前查询结果）</view>
@@ -26,8 +26,8 @@
       <view class="meta">{{item.createdAtText}} · {{item.fileSizeText}}</view>
 
       <view class="row-actions">
-        <button size="mini" data-index="{{index}}" bindtap="previewDoc">预览</button>
-        <button size="mini" data-index="{{index}}" bindtap="openInChat">对话</button>
+        <button class="row-btn secondary-btn" size="mini" data-index="{{index}}" bindtap="previewDoc">预览</button>
+        <button class="row-btn primary-btn" size="mini" data-index="{{index}}" bindtap="openInChat">对话</button>
         <button size="mini" type="warn" data-id="{{item.id}}" bindtap="deleteDoc">删除</button>
       </view>
     </view>

@@ -19,11 +19,11 @@ Page({
   },
 
   switchTab() {
-    wx.switchTab({url: '/page/component/index'})
+    wx.switchTab({url: '/pages/docai/dashboard/index'})
   },
 
   reLaunch() {
-    wx.reLaunch({url: '/page/component/index'})
+    wx.reLaunch({url: '/pages/docai/dashboard/index'})
   },
   onLoad() {
     this.setData({

@@ -6,6 +6,14 @@ miniprogram/config.js 的 apiBaseUrl 现在是本机地址：http://127.0.0.1:80
 用一个公网 https 域名（不能是 127.0.0.1），并在小程序后台加入“request 合法域名”。
 生产环境必须走这个方式。
 
+用户一：aaa 密码：aaaaaa
+
+预览用微信开发者工具
+
+未来应该用微信登录代替注册
+
+
+---
 # WeChat Mini Program (DocAI Adaptation)
 
 本目录已从微信官方 Demo 改造为 DocAI 业务小程序版本，并对齐 `docai-frontend` 的核心模块。

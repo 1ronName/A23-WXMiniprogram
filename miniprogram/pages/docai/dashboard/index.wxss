@@ -13,9 +13,26 @@
   box-shadow: 0 12rpx 26rpx rgba(31, 58, 147, 0.22);
 }
 
+.hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
 .hero-title {
   font-size: 36rpx;
   font-weight: 700;
+}
+
+.logout-btn {
+  margin: 0;
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 22rpx;
+  line-height: 1.2;
 }
 
 .hero-desc {
@@ -58,29 +75,50 @@
   font-weight: 700;
 }
 
-.action-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
-}
-
-.action-btn {
-  margin: 0;
-  border-radius: 16rpx;
-  border: 1rpx solid #d8e2ff;
-  background: #ffffff;
-  color: #2449bf;
-  font-size: 28rpx;
-}
-
 .flow-box {
-  background: #ffffff;
-  border-radius: 18rpx;
-  padding: 16rpx 20rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-radius: 20rpx;
+  padding: 12rpx 20rpx;
+  border: 1rpx solid #d8e4ff;
 }
 
 .flow-item {
-  font-size: 26rpx;
-  color: #334155;
-  line-height: 1.9;
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+  padding: 16rpx 0;
+}
+
+.flow-item + .flow-item {
+  border-top: 1rpx dashed #d9e5ff;
+}
+
+.flow-index {
+  width: 42rpx;
+  height: 42rpx;
+  line-height: 42rpx;
+  border-radius: 50%;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #3a6cff 0%, #214fc7 100%);
+  flex-shrink: 0;
+}
+
+.flow-content {
+  flex: 1;
+}
+
+.flow-title {
+  font-size: 28rpx;
+  color: #22314f;
+  font-weight: 600;
+}
+
+.flow-desc {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: #5f6f8d;
+  line-height: 1.5;
 }

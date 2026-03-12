@@ -10,13 +10,13 @@
       <view class="tab {{!isLogin ? 'active' : ''}}" data-login="false" bindtap="switchMode">注册</view>
     </view>
 
-    <input class="input" placeholder="用户名" value="{{username}}" bindinput="onUsernameInput" />
+    <input class="input" placeholder-class="input-placeholder" placeholder="用户名" value="{{username}}" bindinput="onUsernameInput" />
 
-    <input wx:if="{{!isLogin}}" class="input" placeholder="昵称（可选）" value="{{nickname}}" bindinput="onNicknameInput" />
+    <input wx:if="{{!isLogin}}" class="input" placeholder-class="input-placeholder" placeholder="昵称（可选）" value="{{nickname}}" bindinput="onNicknameInput" />
 
-    <input class="input" password placeholder="密码" value="{{password}}" bindinput="onPasswordInput" />
+    <input class="input" password placeholder-class="input-placeholder" placeholder="密码" value="{{password}}" bindinput="onPasswordInput" />
 
-    <input wx:if="{{!isLogin}}" class="input" password placeholder="确认密码" value="{{confirmPassword}}" bindinput="onConfirmPasswordInput" />
+    <input wx:if="{{!isLogin}}" class="input" password placeholder-class="input-placeholder" placeholder="确认密码" value="{{confirmPassword}}" bindinput="onConfirmPasswordInput" />
 
     <button class="submit" type="primary" loading="{{loading}}" bindtap="submit">
       {{isLogin ? '登录' : '注册'}}

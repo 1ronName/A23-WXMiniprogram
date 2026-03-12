@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "文档管理",
+  "navigationBarBackgroundColor": "#ffffff",
+  "navigationBarTextStyle": "black",
   "enablePullDownRefresh": true
 }

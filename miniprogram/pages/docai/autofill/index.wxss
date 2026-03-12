@@ -34,7 +34,24 @@
   border-radius: 12rpx;
 }
 
-.btn.primary {
+.primary-btn {
+  background: linear-gradient(135deg, #356cff 0%, #2251cb 100%);
+  color: #ffffff;
+  border: 0;
+}
+
+.secondary-btn {
+  background: #eff4ff;
+  color: #2d55cf;
+  border: 1rpx solid #cddcff;
+}
+
+.primary-btn::after,
+.secondary-btn::after {
+  border: 0;
+}
+
+.btn.primary-btn {
   margin-top: 18rpx;
 }
 
