@@ -63,19 +63,27 @@ Page({
     this.setData({ loading: true })
     try {
       const selectedType = this.data.typeOptions[this.data.typeIndex]
-      const params = {
-        page: 1,
-        size: 100,
-        keyword: this.data.keyword,
-      }
+      const keyword = this.data.keyword.toLowerCase()
+
+      // /source/documents 返回当前用户全部文档（数组）
+      const res = await api.getSourceDocuments()
+      let rawList = res.data || []
+
+      // 客户端过滤类型
       if (selectedType !== '全部类型') {
-        params.fileType = selectedType
+        rawList = rawList.filter((item) => item.fileType === selectedType)
+      }
+      // 客户端关键词过滤
+      if (keyword) {
+        rawList = rawList.filter((item) =>
+          (item.fileName || '').toLowerCase().includes(keyword)
+        )
       }
 
-      const res = await api.getDocuments(params)
-      const rawList = (res.data && res.data.records) || res.data || []
       const list = rawList.map((item) => {
         return Object.assign({}, item, {
+          // WXML 模板使用 title 字段，映射到 fileName
+          title: item.fileName || '',
           createdAtText: this.formatDate(item.createdAt),
           fileSizeText: this.formatSize(item.fileSize),
         })
@@ -117,7 +125,7 @@ Page({
 
   previewDoc(e) {
     const item = this.data.documents[e.currentTarget.dataset.index]
-    const content = item.contentText || item.rawText || '暂无可预览内容'
+    const content = item.docSummary || item.contentText || item.rawText || '暂无可预览内容'
     wx.showModal({
       title: item.title || '文档预览',
       content: String(content).slice(0, 900),
@@ -129,7 +137,7 @@ Page({
     const item = this.data.documents[e.currentTarget.dataset.index]
     wx.setStorageSync('docai_current_doc', {
       id: item.id,
-      title: item.title,
+      title: item.fileName || item.title || '',
     })
     wx.switchTab({ url: '/pages/docai/chat/index' })
   },

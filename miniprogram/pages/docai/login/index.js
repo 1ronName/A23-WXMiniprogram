@@ -63,7 +63,7 @@ Page({
         }
         const app = getApp()
         if (app && app.setAuth) {
-          app.setAuth(token, data.user || null)
+          app.setAuth(token, { id: data.userId, username: data.userName, email: data.email })
         }
         wx.showToast({ title: '登录成功', icon: 'success' })
         wx.switchTab({ url: '/pages/docai/dashboard/index' })
@@ -77,11 +77,7 @@ Page({
           return
         }
 
-        await api.authRegister({
-          username,
-          nickname: this.data.nickname,
-          password,
-        })
+        await api.authRegister({ username, password })
         wx.showToast({ title: '注册成功，请登录', icon: 'success' })
         this.setData({
           isLogin: true,
