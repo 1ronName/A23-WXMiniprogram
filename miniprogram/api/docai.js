@@ -80,7 +80,7 @@ function deleteDocument(id) {
 }
 
 function batchDeleteDocuments(docIds) {
-  return request({ url: '/source/batch', method: 'DELETE', data: { docIds: docIds } })
+  return request({ url: '/source/batch-delete', method: 'POST', data: { docIds: docIds } })
 }
 
 // ==================== 模板自动填表 ====================
