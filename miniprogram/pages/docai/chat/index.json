@@ -1,6 +1,4 @@
 {
-  "navigationStyle": "custom",
-  "disableScroll": true,
   "navigationBarTitleText": "智能问答",
-  "backgroundColor": "#f4f7fd"
+  "backgroundColor": "#f7f0e4"
 }

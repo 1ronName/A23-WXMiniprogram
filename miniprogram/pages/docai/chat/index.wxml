@@ -1,15 +1,16 @@
-<view class="chat-workbench">
-  <view class="chat-nav" style="padding-top: {{statusBarHeight}}px;">
-    <view class="chat-nav-bar">
-      <view class="chat-nav-actions">
-        <button class="nav-action" bindtap="openHistory">历史</button>
-        <button class="nav-action" bindtap="openMore">更多</button>
+<view class="doc-page chat-page">
+  <view class="page-shell chat-shell">
+    <view class="panel rise-in chat-nav">
+      <view class="section-head chat-nav-head">
+        <view class="chat-nav-actions">
+          <button class="nav-action" bindtap="openHistory">历史</button>
+          <button class="nav-action" bindtap="openMore">更多</button>
+        </view>
       </view>
     </view>
-  </view>
 
-  <view class="chat-body">
-    <view class="context-bar {{messages.length ? 'context-bar--compact' : ''}}">
+    <view class="panel rise-in chat-main">
+      <view class="context-bar {{messages.length ? 'context-bar--compact' : ''}}">
       <view class="context-main">
         <view class="context-badge">{{currentDoc.id ? '文档问答' : '普通问答'}}</view>
         <view class="context-title">{{contextTitle}}</view>
@@ -25,76 +26,77 @@
       </view>
     </view>
 
-    <view wx:if="{{stateNotice}}" class="state-notice state-notice--{{stateNotice.type}}">
-      <view class="state-main">
-        <view class="state-title">{{stateNotice.title}}</view>
-        <view class="state-desc">{{stateNotice.desc}}</view>
+      <view wx:if="{{stateNotice}}" class="state-notice state-notice--{{stateNotice.type}}">
+        <view class="state-main">
+          <view class="state-title">{{stateNotice.title}}</view>
+          <view class="state-desc">{{stateNotice.desc}}</view>
+        </view>
+        <button wx:if="{{stateNotice.actionText}}" class="state-action" bindtap="retryLastRequest">{{stateNotice.actionText}}</button>
       </view>
-      <button wx:if="{{stateNotice.actionText}}" class="state-action" bindtap="retryLastRequest">{{stateNotice.actionText}}</button>
-    </view>
 
-    <view class="message-stage">
-      <scroll-view class="message-scroll" scroll-y="true" scroll-into-view="{{scrollIntoView}}" enable-flex="true">
-        <view id="chat-anchor-top"></view>
+      <view class="message-stage">
+        <scroll-view class="message-scroll" scroll-y="true" scroll-into-view="{{scrollIntoView}}" enable-flex="true">
+          <view id="chat-anchor-top"></view>
 
-        <view wx:if="{{!messages.length}}" class="empty-state-card">
-          <view class="empty-pill">{{emptyModeLabel}}</view>
-          <view class="empty-title">{{emptyTitle}}</view>
-          <view class="empty-desc">{{emptyDesc}}</view>
-        </view>
-
-        <view wx:else class="message-list">
-          <view
-            wx:for="{{messages}}"
-            wx:key="id"
-            id="msg-{{item.id}}"
-            class="message-row {{item.role === 'user' ? 'message-row--user' : ''}}"
-          >
-            <view class="message-bubble {{item.role === 'user' ? 'message-bubble--user' : 'message-bubble--ai'}}">
-              <view class="message-label">{{item.role === 'ai' ? '智能问答' : item.title}}</view>
-
-              <block wx:if="{{item.role === 'ai' && item.sections.length}}">
-                <view
-                  wx:for="{{item.sections}}"
-                  wx:key="index"
-                  wx:for-item="section"
-                  class="message-section"
-                >
-                  <view class="message-section-title">{{section.label}}</view>
-                  <view class="message-section-content">{{section.content}}</view>
-                </view>
-              </block>
-
-              <block wx:else>
-                <view
-                  wx:for="{{item.paragraphs}}"
-                  wx:key="index"
-                  wx:for-item="paragraph"
-                  class="message-paragraph"
-                >
-                  {{paragraph}}
-                </view>
-              </block>
-
-              <view class="message-time">{{item.timeLabel}}</view>
-            </view>
+          <view wx:if="{{!messages.length}}" class="empty-state-card">
+            <view class="empty-pill">{{emptyModeLabel}}</view>
+            <view class="empty-title">{{emptyTitle}}</view>
+            <view class="empty-desc">{{emptyDesc}}</view>
           </view>
 
-          <view wx:if="{{pendingReply}}" id="msg-loading" class="message-row">
-            <view class="message-bubble message-bubble--ai message-bubble--pending">
-              <view class="message-label">{{currentDoc.id ? '智能问答' : '智能问答'}}</view>
-              <view class="typing-dots">
-                <view class="typing-dot"></view>
-                <view class="typing-dot"></view>
-                <view class="typing-dot"></view>
+          <view wx:else class="message-list">
+            <view
+              wx:for="{{messages}}"
+              wx:key="id"
+              id="msg-{{item.id}}"
+              class="message-row {{item.role === 'user' ? 'message-row--user' : ''}}"
+            >
+              <view class="message-bubble {{item.role === 'user' ? 'message-bubble--user' : 'message-bubble--ai'}}">
+                <view class="message-label">{{item.role === 'ai' ? '智能问答' : item.title}}</view>
+
+                <block wx:if="{{item.role === 'ai' && item.sections.length}}">
+                  <view
+                    wx:for="{{item.sections}}"
+                    wx:key="index"
+                    wx:for-item="section"
+                    class="message-section"
+                  >
+                    <view class="message-section-title">{{section.label}}</view>
+                    <view class="message-section-content">{{section.content}}</view>
+                  </view>
+                </block>
+
+                <block wx:else>
+                  <view
+                    wx:for="{{item.paragraphs}}"
+                    wx:key="index"
+                    wx:for-item="paragraph"
+                    class="message-paragraph"
+                  >
+                    {{paragraph}}
+                  </view>
+                </block>
+
+                <view class="message-time">{{item.timeLabel}}</view>
               </view>
-              <view class="message-time">生成中</view>
+            </view>
+
+            <view wx:if="{{pendingReply}}" id="msg-loading" class="message-row">
+              <view class="message-bubble message-bubble--ai message-bubble--pending">
+                <view class="message-label">{{currentDoc.id ? '智能问答' : '智能问答'}}</view>
+                <view class="typing-dots">
+                  <view class="typing-dot"></view>
+                  <view class="typing-dot"></view>
+                  <view class="typing-dot"></view>
+                </view>
+                <view class="message-time">生成中</view>
+              </view>
             </view>
           </view>
-        </view>
 
-        <view id="chat-anchor-bottom"></view>
-      </scroll-view>
+          <view id="chat-anchor-bottom"></view>
+        </scroll-view>
+      </view>
     </view>
   </view>
 

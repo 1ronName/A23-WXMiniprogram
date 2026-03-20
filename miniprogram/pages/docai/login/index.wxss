@@ -150,3 +150,11 @@
   line-height: 1.6;
   color: #6b7487;
 }
+
+.dev-entry {
+  margin-top: 20rpx;
+  text-align: center;
+  font-size: 20rpx;
+  color: rgba(107, 116, 135, 0.42);
+  letter-spacing: 1rpx;
+}

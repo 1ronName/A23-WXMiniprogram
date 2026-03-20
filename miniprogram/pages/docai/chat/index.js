@@ -418,7 +418,6 @@ function buildDocumentOption(item) {
 
 Page({
   data: {
-    statusBarHeight: 20,
     inputText: '',
     canSend: false,
     inputHeight: INPUT_MIN_HEIGHT,
@@ -445,14 +444,9 @@ Page({
   },
 
   onLoad() {
-    const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync()
     this.didInit = false
     this.noticeTimer = null
     this.lastQuestion = ''
-
-    this.setData({
-      statusBarHeight: windowInfo.statusBarHeight || 20,
-    })
   },
 
   onShow() {

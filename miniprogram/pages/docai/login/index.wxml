@@ -103,6 +103,8 @@
       </button>
 
       <view class="auth-tip">{{modeTip}}</view>
+
+      <view class="dev-entry" bindtap="devQuickEnter">开发者快速进入</view>
     </view>
   </view>
 </view>

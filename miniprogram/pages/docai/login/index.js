@@ -34,7 +34,7 @@ Page({
   onShow() {
     const token = wx.getStorageSync('token') || ''
     if (token) {
-      wx.switchTab({ url: '/pages/docai/documents/index' })
+      wx.switchTab({ url: '/pages/docai/dashboard/index' })
     }
   },
 
@@ -103,7 +103,7 @@ Page({
           throw new Error('登录失败，未获取到登录令牌')
         }
         wx.showToast({ title: '登录成功', icon: 'success' })
-        wx.switchTab({ url: '/pages/docai/documents/index' })
+        wx.switchTab({ url: '/pages/docai/dashboard/index' })
       } else {
         if (password.length < 6) {
           wx.showToast({ title: '密码至少需要 6 位', icon: 'none' })
@@ -124,7 +124,7 @@ Page({
 
         if (this.applyAuth(data)) {
           wx.showToast({ title: '注册成功', icon: 'success' })
-          wx.switchTab({ url: '/pages/docai/documents/index' })
+          wx.switchTab({ url: '/pages/docai/dashboard/index' })
           return
         }
 
@@ -143,5 +143,26 @@ Page({
     } finally {
       this.setData({ loading: false })
     }
+  },
+
+  devQuickEnter() {
+    const app = getApp()
+    const token = 'dev-local-bypass-token'
+    const devUser = {
+      id: 'dev-local',
+      username: '开发者',
+      nickname: '开发者',
+      email: '',
+    }
+
+    if (app && app.setAuth) {
+      app.setAuth(token, devUser)
+    } else {
+      wx.setStorageSync('token', token)
+      wx.setStorageSync('user', devUser)
+    }
+
+    wx.showToast({ title: '已进入开发者模式', icon: 'none' })
+    wx.switchTab({ url: '/pages/docai/dashboard/index' })
   },
 })
