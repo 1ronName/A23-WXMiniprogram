@@ -1,0 +1,28 @@
+<view class="doc-page profile-page">
+  <view class="page-shell">
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">账号信息</view>
+          <view class="section-subtitle">当前登录账号与本地联调身份信息</view>
+        </view>
+      </view>
+
+      <view class="profile-user-card">
+        <view class="profile-user-avatar">{{avatarText}}</view>
+        <view class="profile-user-copy">
+          <view class="profile-user-label">用户名</view>
+          <view class="profile-user-name">{{userName}}</view>
+          <view class="profile-user-meta" wx:if="{{userEmail}}">{{userEmail}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="panel rise-in">
+      <view class="section-title">账号操作</view>
+      <view class="profile-actions">
+        <button class="warn-btn inline-btn profile-logout-btn" bindtap="logout">退出登录</button>
+      </view>
+    </view>
+  </view>
+</view>
