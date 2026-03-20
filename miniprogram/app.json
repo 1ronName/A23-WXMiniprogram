@@ -9,27 +9,27 @@
   "window": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "DocAI",
-    "navigationBarBackgroundColor": "#ffffff",
-    "backgroundColor": "#f5f7fb",
+    "navigationBarBackgroundColor": "#f8f3ea",
+    "backgroundColor": "#f7f0e4",
     "backgroundTextStyle": "light"
   },
   "tabBar": {
-    "color": "#6b778d",
-    "selectedColor": "#2f63ff",
-    "borderStyle": "white",
-    "backgroundColor": "#fdfefe",
+    "color": "#6a7081",
+    "selectedColor": "#1d57f2",
+    "borderStyle": "black",
+    "backgroundColor": "#fffaf3",
     "list": [
-      {
-        "pagePath": "pages/docai/dashboard/index",
-        "iconPath": "image/icon_component.png",
-        "selectedIconPath": "image/icon_component_blue.png",
-        "text": "工作台"
-      },
       {
         "pagePath": "pages/docai/documents/index",
         "iconPath": "image/icon_API.png",
         "selectedIconPath": "image/icon_API_blue.png",
         "text": "文档"
+      },
+      {
+        "pagePath": "pages/docai/dashboard/index",
+        "iconPath": "image/icon_component.png",
+        "selectedIconPath": "image/icon_component_blue.png",
+        "text": "工作台"
       },
       {
         "pagePath": "pages/docai/autofill/index",
@@ -55,7 +55,7 @@
   "style": "v2",
   "permission": {
     "scope.userLocation": {
-      "desc": "你的位置信息将用于小程序位置接口的效果展示"
+      "desc": "用于展示位置能力相关效果时的示例说明"
     }
   },
   "cloud": true,
@@ -67,7 +67,12 @@
     "weui": true
   },
   "frameset": true,
-  "requiredBackgroundModes": ["audio", "location"],
-  "embeddedAppIdList": ["wxfdcee92a299bcaf1"],
+  "requiredBackgroundModes": [
+    "audio",
+    "location"
+  ],
+  "embeddedAppIdList": [
+    "wxfdcee92a299bcaf1"
+  ],
   "lazyCodeLoading": "requiredComponents"
 }

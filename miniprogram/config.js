@@ -19,7 +19,7 @@ const config = {
 
   // DocAI 后端 API 地址
   // 开发者工具本机调试可使用 127.0.0.1，真机请改为可访问的局域网或公网地址。
-  apiBaseUrl: 'http://127.0.0.1:8080/api/v1',
+  apiBaseUrl: 'http://127.0.0.1:8082/api',
   requestTimeout: 120000,
 }
 

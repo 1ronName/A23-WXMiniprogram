@@ -1,35 +1,133 @@
-<view class="page">
-  <view class="toolbar">
-    <input class="search" placeholder="搜索文档名称" value="{{keyword}}" bindinput="onKeywordInput" />
-    <picker mode="selector" range="{{typeOptions}}" value="{{typeIndex}}" bindchange="onTypeChange">
-      <view class="picker">{{typeOptions[typeIndex]}}</view>
-    </picker>
-    <button class="mini secondary-btn" size="mini" bindtap="loadDocuments">查询</button>
-  </view>
-
-  <view class="actions">
-    <button class="action primary-btn" bindtap="chooseAndUpload">上传文档</button>
-    <button class="action secondary-btn" bindtap="loadDocuments">刷新</button>
-  </view>
-
-  <view class="summary">共 {{documents.length}} 条（仅展示当前查询结果）</view>
-
-  <scroll-view class="list" scroll-y="true">
-    <view wx:if="{{loading}}" class="empty">加载中...</view>
-    <view wx:elif="{{documents.length === 0}}" class="empty">暂无文档</view>
-
-    <view wx:for="{{documents}}" wx:key="id" class="item">
-      <view class="row-top">
-        <view class="title">{{item.title}}</view>
-        <view class="tag">{{item.fileType}}</view>
+<view class="doc-page home-page">
+  <view class="sticky-search {{showFloatingSearch ? 'sticky-search--visible' : ''}}">
+    <view class="sticky-avatar">{{avatarText}}</view>
+    <view class="sticky-search-bar">
+      <view class="search-icon">
+        <view class="search-icon-circle"></view>
+        <view class="search-icon-line"></view>
       </view>
-      <view class="meta">{{item.createdAtText}} · {{item.fileSizeText}}</view>
-
-      <view class="row-actions">
-        <button class="row-btn secondary-btn" size="mini" data-index="{{index}}" bindtap="previewDoc">预览</button>
-        <button class="row-btn primary-btn" size="mini" data-index="{{index}}" bindtap="openInChat">对话</button>
-        <button size="mini" type="warn" data-id="{{item.id}}" bindtap="deleteDoc">删除</button>
+      <input
+        class="search-input search-input--compact"
+        placeholder="搜索文档名称、作者"
+        value="{{keyword}}"
+        confirm-type="search"
+        bindinput="onKeywordInput"
+        bindconfirm="applyFilters"
+      />
+      <button wx:if="{{keyword}}" class="search-clear" bindtap="clearKeyword">清空</button>
+    </view>
+  </view>
+  <view class="page-shell home-shell">
+    <view class="user-card rise-in">
+      <view class="user-main">
+        <view class="user-avatar">{{avatarText}}</view>
+        <view class="user-copy">
+          <view class="user-label">当前账号</view>
+          <view class="user-name">{{userName}}</view>
+        </view>
       </view>
     </view>
-  </scroll-view>
+
+    <view class="search-card rise-in">
+      <view class="search-icon">
+        <view class="search-icon-circle"></view>
+        <view class="search-icon-line"></view>
+      </view>
+      <input
+        class="search-input"
+        placeholder="搜索文档名称、作者"
+        value="{{keyword}}"
+        confirm-type="search"
+        bindinput="onKeywordInput"
+        bindconfirm="applyFilters"
+      />
+      <button wx:if="{{keyword}}" class="search-clear" bindtap="clearKeyword">清空</button>
+    </view>
+
+    <view class="quick-card rise-in">
+      <view class="quick-grid">
+        <button class="quick-item" bindtap="chooseAndUpload">
+          <view class="quick-icon quick-icon--upload">
+            <view class="icon-upload-page"></view>
+            <view class="icon-upload-line"></view>
+            <view class="icon-upload-head icon-upload-head--left"></view>
+            <view class="icon-upload-head icon-upload-head--right"></view>
+          </view>
+          <view class="quick-title">上传</view>
+        </button>
+
+        <button class="quick-item" bindtap="goChat">
+          <view class="quick-icon quick-icon--ai">
+            <view class="icon-ai-circle icon-ai-circle--outer"></view>
+            <view class="icon-ai-circle icon-ai-circle--inner"></view>
+            <view class="icon-ai-dot"></view>
+          </view>
+          <view class="quick-title">AI 对话</view>
+        </button>
+
+        <button class="quick-item" bindtap="goDashboard">
+          <view class="quick-icon quick-icon--tools">
+            <view class="icon-tools-box"></view>
+            <view class="icon-tools-line icon-tools-line--h"></view>
+            <view class="icon-tools-line icon-tools-line--v"></view>
+          </view>
+          <view class="quick-title">更多工具</view>
+        </button>
+      </view>
+    </view>
+
+    <view class="category-card rise-in">
+      <scroll-view class="category-scroll" scroll-x="true" show-scrollbar="false">
+        <view class="category-list">
+          <view
+            wx:for="{{categories}}"
+            wx:key="key"
+            class="category-chip {{activeCategory === item.key ? 'category-chip--active' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="switchCategory"
+          >
+            {{item.label}}
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="document-card rise-in">
+      <view class="document-card-head">
+        <view class="document-card-title">文档列表</view>
+        <view class="document-card-count">{{documents.length}} 份</view>
+      </view>
+
+      <view wx:if="{{loading}}" class="empty-state">
+        <view class="empty-title">正在同步文档</view>
+        <view class="empty-desc">稍等一下，系统正在刷新列表。</view>
+      </view>
+
+      <view wx:elif="{{isEmpty}}" class="empty-state">
+        <view class="empty-title">暂无匹配文档</view>
+        <view class="empty-desc">上传文件后会自动出现在这里。</view>
+      </view>
+
+      <view wx:else class="document-list">
+        <view
+          wx:for="{{documents}}"
+          wx:key="id"
+          class="document-row"
+          bindtap="previewDoc"
+          data-index="{{index}}"
+        >
+          <view class="document-file-icon document-file-icon--{{item.fileTheme}}">{{item.fileBadge}}</view>
+
+          <view class="document-info">
+            <view class="document-title-row">
+              <view class="document-title">{{item.title}}</view>
+              <button class="document-more" catchtap="openMoreActions" data-index="{{index}}">...</button>
+            </view>
+            <view class="document-author">{{item.authorText}}</view>
+            <view class="document-meta">{{item.fileSizeText}} · {{item.modifiedAtText}}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
 </view>

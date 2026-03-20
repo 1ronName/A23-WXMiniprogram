@@ -1,6 +1,6 @@
 {
-  "navigationBarTitleText": "文档管理",
-  "navigationBarBackgroundColor": "#ffffff",
+  "navigationBarTitleText": "文档",
+  "navigationBarBackgroundColor": "#fffaf3",
   "navigationBarTextStyle": "black",
-  "enablePullDownRefresh": true
+  "enableShareAppMessage": true
 }

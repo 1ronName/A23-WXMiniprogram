@@ -1,25 +1,108 @@
-<view class="page">
-  <view class="brand">
-    <view class="title">DocAI</view>
-    <view class="subtitle">智能文档处理系统</view>
-  </view>
-
-  <view class="card">
-    <view class="tabs">
-      <view class="tab {{isLogin ? 'active' : ''}}" data-login="true" bindtap="switchMode">登录</view>
-      <view class="tab {{!isLogin ? 'active' : ''}}" data-login="false" bindtap="switchMode">注册</view>
+<view class="doc-page auth-page">
+  <view class="page-shell">
+    <view class="auth-copy rise-in">
+      <view class="hero-kicker">DocAI Workspace</view>
+      <view class="auth-title">把资料整理、字段抽取和智能问答放进同一条移动工作流</view>
+      <view class="auth-desc">
+        这套界面围绕真实使用习惯重做，更强调一步到位的上传、查询、问答与填表体验，方便团队本地联调和现场演示。
+      </view>
     </view>
 
-    <input class="input" placeholder-class="input-placeholder" placeholder="用户名" value="{{username}}" bindinput="onUsernameInput" />
+    <view class="auth-feature-row rise-in">
+      <view class="auth-feature">
+        <view class="feature-badge">01</view>
+        <view class="feature-title">文档集中管理</view>
+        <view class="feature-desc">上传后统一筛选、预览、进入问答。</view>
+      </view>
+      <view class="auth-feature">
+        <view class="feature-badge">02</view>
+        <view class="feature-title">填表链路前置</view>
+        <view class="feature-desc">模板选择和来源文档状态在同一屏展示。</view>
+      </view>
+      <view class="auth-feature">
+        <view class="feature-badge">03</view>
+        <view class="feature-title">更适合演示</view>
+        <view class="feature-desc">核心信息一眼可见，便于答辩和调试。</view>
+      </view>
+      <view class="auth-feature">
+        <view class="feature-badge">04</view>
+        <view class="feature-title">本地联调优先</view>
+        <view class="feature-desc">围绕当前本地服务和接口组织入口。</view>
+      </view>
+    </view>
 
-    <input wx:if="{{!isLogin}}" class="input" placeholder-class="input-placeholder" placeholder="昵称（可选）" value="{{nickname}}" bindinput="onNicknameInput" />
+    <view class="auth-card rise-in">
+      <view class="auth-tabs">
+        <view
+          class="auth-tab {{isLogin ? 'auth-tab--active' : ''}}"
+          data-login="true"
+          bindtap="switchMode"
+        >
+          登录
+        </view>
+        <view
+          class="auth-tab {{!isLogin ? 'auth-tab--active' : ''}}"
+          data-login="false"
+          bindtap="switchMode"
+        >
+          注册
+        </view>
+      </view>
 
-    <input class="input" password placeholder-class="input-placeholder" placeholder="密码" value="{{password}}" bindinput="onPasswordInput" />
+      <view class="auth-mode-title">{{modeTitle}}</view>
+      <view class="auth-mode-desc">{{modeDesc}}</view>
 
-    <input wx:if="{{!isLogin}}" class="input" password placeholder-class="input-placeholder" placeholder="确认密码" value="{{confirmPassword}}" bindinput="onConfirmPasswordInput" />
+      <view class="field-block">
+        <view class="field-label">用户名</view>
+        <input
+          class="auth-input"
+          placeholder-class="auth-placeholder"
+          placeholder="请输入用于登录的用户名"
+          value="{{username}}"
+          bindinput="onUsernameInput"
+        />
+      </view>
 
-    <button class="submit" type="primary" loading="{{loading}}" bindtap="submit">
-      {{isLogin ? '登录' : '注册'}}
-    </button>
+      <view class="field-block" wx:if="{{!isLogin}}">
+        <view class="field-label">显示昵称</view>
+        <input
+          class="auth-input"
+          placeholder-class="auth-placeholder"
+          placeholder="可选，不填则默认使用用户名"
+          value="{{nickname}}"
+          bindinput="onNicknameInput"
+        />
+      </view>
+
+      <view class="field-block">
+        <view class="field-label">密码</view>
+        <input
+          class="auth-input"
+          password
+          placeholder-class="auth-placeholder"
+          placeholder="请输入密码"
+          value="{{password}}"
+          bindinput="onPasswordInput"
+        />
+      </view>
+
+      <view class="field-block" wx:if="{{!isLogin}}">
+        <view class="field-label">确认密码</view>
+        <input
+          class="auth-input"
+          password
+          placeholder-class="auth-placeholder"
+          placeholder="请再次输入密码"
+          value="{{confirmPassword}}"
+          bindinput="onConfirmPasswordInput"
+        />
+      </view>
+
+      <button class="solid-btn auth-submit" loading="{{loading}}" bindtap="submit">
+        {{submitText}}
+      </button>
+
+      <view class="auth-tip">{{modeTip}}</view>
+    </view>
   </view>
 </view>

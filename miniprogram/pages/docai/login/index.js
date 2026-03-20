@@ -1,25 +1,50 @@
 const api = require('../../../api/docai')
 
+function getModeMeta(isLogin) {
+  if (isLogin) {
+    return {
+      modeTitle: '欢迎回来',
+      modeDesc: '进入工作台，继续上传资料、发起问答或进行智能填表。',
+      submitText: '进入工作台',
+      modeTip: '首次本地联调建议先注册一个测试账号。',
+    }
+  }
+
+  return {
+    modeTitle: '创建测试账号',
+    modeDesc: '注册后会直接写入本地环境，方便你继续做前后端联调。',
+    submitText: '创建并进入',
+    modeTip: '昵称选填，默认会使用用户名作为显示名称。',
+  }
+}
+
 Page({
-  data: {
-    isLogin: true,
-    loading: false,
-    username: '',
-    nickname: '',
-    password: '',
-    confirmPassword: '',
-  },
+  data: Object.assign(
+    {
+      isLogin: true,
+      loading: false,
+      username: '',
+      nickname: '',
+      password: '',
+      confirmPassword: '',
+    },
+    getModeMeta(true)
+  ),
 
   onShow() {
     const token = wx.getStorageSync('token') || ''
     if (token) {
-      wx.switchTab({ url: '/pages/docai/dashboard/index' })
+      wx.switchTab({ url: '/pages/docai/documents/index' })
     }
   },
 
   switchMode(e) {
     const isLogin = String(e.currentTarget.dataset.login) === 'true'
-    this.setData({ isLogin })
+    this.setData(Object.assign({
+      isLogin,
+      password: '',
+      confirmPassword: '',
+    }, getModeMeta(isLogin)))
   },
 
   onUsernameInput(e) {
@@ -36,6 +61,23 @@ Page({
 
   onConfirmPasswordInput(e) {
     this.setData({ confirmPassword: e.detail.value })
+  },
+
+  applyAuth(data) {
+    const token = data.token || ''
+    if (!token) {
+      return false
+    }
+
+    const app = getApp()
+    if (app && app.setAuth) {
+      app.setAuth(token, {
+        id: data.userId,
+        username: data.userName || data.username || '',
+        email: data.email || '',
+      })
+    }
+    return true
   },
 
   async submit() {
@@ -57,37 +99,45 @@ Page({
       if (this.data.isLogin) {
         const res = await api.authLogin({ username, password })
         const data = res.data || {}
-        const token = data.token || ''
-        if (!token) {
-          throw new Error('登录失败，未返回 token')
-        }
-        const app = getApp()
-        if (app && app.setAuth) {
-          app.setAuth(token, { id: data.userId, username: data.userName, email: data.email })
+        if (!this.applyAuth(data)) {
+          throw new Error('登录失败，未获取到登录令牌')
         }
         wx.showToast({ title: '登录成功', icon: 'success' })
-        wx.switchTab({ url: '/pages/docai/dashboard/index' })
+        wx.switchTab({ url: '/pages/docai/documents/index' })
       } else {
         if (password.length < 6) {
-          wx.showToast({ title: '密码至少6位', icon: 'none' })
-          return
-        }
-        if (password !== this.data.confirmPassword) {
-          wx.showToast({ title: '两次密码不一致', icon: 'none' })
+          wx.showToast({ title: '密码至少需要 6 位', icon: 'none' })
           return
         }
 
-        await api.authRegister({ username, password })
+        if (password !== this.data.confirmPassword) {
+          wx.showToast({ title: '两次输入的密码不一致', icon: 'none' })
+          return
+        }
+
+        const res = await api.authRegister({
+          username,
+          password,
+          nickname: this.data.nickname,
+        })
+        const data = res.data || {}
+
+        if (this.applyAuth(data)) {
+          wx.showToast({ title: '注册成功', icon: 'success' })
+          wx.switchTab({ url: '/pages/docai/documents/index' })
+          return
+        }
+
         wx.showToast({ title: '注册成功，请登录', icon: 'success' })
-        this.setData({
+        this.setData(Object.assign({
           isLogin: true,
           password: '',
           confirmPassword: '',
-        })
+        }, getModeMeta(true)))
       }
     } catch (err) {
       wx.showToast({
-        title: (err && err.message) || '请求失败',
+        title: (err && err.message) || '请求失败，请稍后重试',
         icon: 'none',
       })
     } finally {

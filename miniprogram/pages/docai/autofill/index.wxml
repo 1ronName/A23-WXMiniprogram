@@ -1,16 +1,112 @@
-<view class="page">
-  <view class="card">
-    <view class="title">上传模板并智能预览</view>
-    <view class="desc">小程序端使用预览模式验证模板和数据源匹配情况，服务端会返回填表耗时和基础统计（默认自动选取前 5 个文档作为数据源）。</view>
+<view class="doc-page">
+  <view class="page-shell">
+    <view class="hero-card rise-in">
+      <view class="hero-kicker">Auto Fill</view>
+      <view class="hero-title">智能填表</view>
+      <view class="hero-desc">
+        模板选择、来源文档数量和预览结果放在同一条链路里，更贴近报名表、汇总表和申报材料的真实使用场景。
+      </view>
+      <view class="hero-actions">
+        <button class="solid-btn inline-btn" bindtap="chooseTemplate">选择模板</button>
+        <button class="outline-btn inline-btn autofill-hero-outline" loading="{{loading}}" bindtap="startFill">开始预览</button>
+      </view>
+    </view>
 
-    <button class="btn secondary-btn" bindtap="chooseTemplate">选择模板文件</button>
-    <view wx:if="{{templateName}}" class="file-name">已选模板：{{templateName}}</view>
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">操作步骤</view>
+          <view class="section-subtitle">尽量把用户常问的“先做什么、结果在哪里看”直接说明白。</view>
+        </view>
+      </view>
 
-    <button class="btn primary-btn" loading="{{loading}}" bindtap="startFill">开始预览</button>
-  </view>
+      <view class="info-list">
+        <view class="info-row">
+          <view class="info-index">1</view>
+          <view class="info-content">
+            <view class="info-title">选择一个模板文件</view>
+            <view class="info-desc">目前支持 Word 和 Excel 模板，建议先准备结构清晰的示例模板。</view>
+          </view>
+        </view>
+        <view class="info-row">
+          <view class="info-index">2</view>
+          <view class="info-content">
+            <view class="info-title">系统自动读取来源文档</view>
+            <view class="info-desc">会从当前账号已上传的文档中选择最多 10 份作为填表数据来源。</view>
+          </view>
+        </view>
+        <view class="info-row">
+          <view class="info-index">3</view>
+          <view class="info-content">
+            <view class="info-title">返回可展示的预览摘要</view>
+            <view class="info-desc">你可以直接查看填表统计和模板信息，适合做联调验证和演示讲解。</view>
+          </view>
+        </view>
+      </view>
+    </view>
 
-  <view class="card" wx:if="{{resultText}}">
-    <view class="title small">预览结果</view>
-    <text class="result">{{resultText}}</text>
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">模板与数据源</view>
+          <view class="section-subtitle">模板状态和来源文档量级集中展示，减少页面间来回跳转。</view>
+        </view>
+        <view class="pill">{{sourceDocCount}} 份来源文档</view>
+      </view>
+
+      <view class="autofill-status-grid">
+        <view class="autofill-status-card">
+          <view class="autofill-status-label">已选模板</view>
+          <view class="autofill-status-value">{{templateName || '暂未选择模板文件'}}</view>
+        </view>
+        <view class="autofill-status-card">
+          <view class="autofill-status-label">当前状态</view>
+          <view class="autofill-status-value">{{templateStatusText}}</view>
+        </view>
+      </view>
+
+      <view class="autofill-note">
+        提示：建议先在文档中心上传好测试资料，再回来执行智能填表，这样预览结果会更稳定。
+      </view>
+    </view>
+
+    <view class="panel rise-in" wx:if="{{resultReady}}">
+      <view class="section-head">
+        <view>
+          <view class="section-title">预览结果</view>
+          <view class="section-subtitle">返回的是适合移动端查看的摘要结果，不会把复杂信息挤在一行里。</view>
+        </view>
+      </view>
+
+      <view class="metric-grid autofill-metrics">
+        <view class="metric-card">
+          <view class="metric-value">{{resultMeta.filledCount}}</view>
+          <view class="metric-label">已填字段</view>
+          <view class="metric-note">成功匹配并回填的字段数量</view>
+        </view>
+        <view class="metric-card">
+          <view class="metric-value">{{resultMeta.blankCount}}</view>
+          <view class="metric-label">待补字段</view>
+          <view class="metric-note">仍需人工确认或补充的字段数量</view>
+        </view>
+        <view class="metric-card">
+          <view class="metric-value">{{resultMeta.totalSlots}}</view>
+          <view class="metric-label">总字段数</view>
+          <view class="metric-note">本次模板识别出的字段总数</view>
+        </view>
+        <view class="metric-card">
+          <view class="metric-value">{{resultMeta.fillTimeMs}}ms</view>
+          <view class="metric-label">处理耗时</view>
+          <view class="metric-note">结果返回时记录的服务端处理耗时</view>
+        </view>
+      </view>
+
+      <view class="autofill-result-meta">
+        <view class="autofill-result-item">模板名称：{{resultMeta.templateName || templateName || '未返回'}}</view>
+        <view class="autofill-result-item">结果文件大小：{{resultMeta.fileSizeText}}</view>
+      </view>
+
+      <text class="autofill-result-text">{{resultText}}</text>
+    </view>
   </view>
 </view>

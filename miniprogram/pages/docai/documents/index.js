@@ -1,131 +1,315 @@
 const api = require('../../../api/docai')
 const { ensureLogin } = require('../../../utils/auth')
 
+const FAVORITE_STORAGE_KEY = 'docai_document_favorites'
+const UPLOAD_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'pdf', 'md', 'txt']
+const CATEGORIES = [
+  { key: 'recent', label: '最近' },
+  { key: 'favorite', label: '收藏' },
+]
+
+const TYPE_META = {
+  doc: { badge: 'W', label: 'Word 文档', theme: 'word' },
+  docx: { badge: 'W', label: 'Word 文档', theme: 'word' },
+  xls: { badge: 'X', label: 'Excel 表格', theme: 'excel' },
+  xlsx: { badge: 'X', label: 'Excel 表格', theme: 'excel' },
+  pdf: { badge: 'P', label: 'PDF 文档', theme: 'pdf' },
+  md: { badge: 'M', label: 'Markdown 文档', theme: 'markdown' },
+  txt: { badge: 'T', label: '文本文件', theme: 'text' },
+}
+
+function getTimeValue(value) {
+  const timestamp = value ? new Date(value).getTime() : 0
+  return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
+function getFallbackType(fileName) {
+  const parts = String(fileName || '').split('.')
+  if (parts.length < 2) {
+    return ''
+  }
+
+  return String(parts.pop() || '').toLowerCase()
+}
+
 Page({
   data: {
     loading: false,
     keyword: '',
-    typeOptions: ['全部类型', 'docx', 'xlsx', 'txt', 'md'],
-    typeIndex: 0,
+    showFloatingSearch: false,
+    userName: '团队成员',
+    avatarText: '团',
+    categories: CATEGORIES,
+    activeCategory: 'recent',
+    favoriteMap: {},
+    allDocuments: [],
     documents: [],
+    isEmpty: true,
   },
 
   async onShow() {
     if (!ensureLogin()) {
       return
     }
+
+    this.loadUser()
     await this.loadDocuments()
   },
 
-  async onPullDownRefresh() {
-    await this.loadDocuments()
-    wx.stopPullDownRefresh()
-  },
-
-  onKeywordInput(e) {
-    this.setData({ keyword: e.detail.value.trim() })
-  },
-
-  onTypeChange(e) {
-    this.setData({ typeIndex: Number(e.detail.value) })
-    this.loadDocuments()
-  },
-
-  formatDate(ts) {
-    if (!ts) {
-      return '-'
+  onPageScroll(e) {
+    const showFloatingSearch = e.scrollTop > 108
+    if (showFloatingSearch !== this.data.showFloatingSearch) {
+      this.setData({ showFloatingSearch })
     }
-    const d = new Date(ts)
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const h = String(d.getHours()).padStart(2, '0')
-    const mm = String(d.getMinutes()).padStart(2, '0')
-    return y + '-' + m + '-' + day + ' ' + h + ':' + mm
+  },
+
+  loadUser() {
+    const app = getApp()
+    const appUser = (app && app.globalData && app.globalData.user) || null
+    const cachedUser = wx.getStorageSync('user') || null
+    const user = appUser || cachedUser || {}
+    const userName = user.nickname || user.username || user.userName || '团队成员'
+    const avatarText = String(userName || '文').trim().slice(0, 1).toUpperCase() || '文'
+
+    this.setData({
+      userName,
+      avatarText,
+    })
+  },
+
+  loadFavoriteMap() {
+    const favoriteMap = wx.getStorageSync(FAVORITE_STORAGE_KEY) || {}
+    return favoriteMap && typeof favoriteMap === 'object' ? favoriteMap : {}
+  },
+
+  saveFavoriteMap(favoriteMap) {
+    wx.setStorageSync(FAVORITE_STORAGE_KEY, favoriteMap)
+  },
+
+  getTypeMeta(fileType) {
+    const normalizedType = String(fileType || '').toLowerCase()
+    const fallbackBadge = (normalizedType || 'F').slice(0, 1).toUpperCase()
+    return TYPE_META[normalizedType] || {
+      badge: fallbackBadge,
+      label: '资料文档',
+      theme: 'default',
+    }
+  },
+
+  formatDate(value) {
+    if (!value) {
+      return '--'
+    }
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return '--'
+    }
+
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return month + '-' + day + ' ' + hours + ':' + minutes
   },
 
   formatSize(size) {
     if (!size && size !== 0) {
       return '-'
     }
+
     const kb = 1024
     const mb = kb * 1024
+
     if (size < kb) {
       return size + ' B'
     }
+
     if (size < mb) {
       return (size / kb).toFixed(1) + ' KB'
     }
+
     return (size / mb).toFixed(1) + ' MB'
+  },
+
+  buildDocument(item, favoriteMap) {
+    const title = item.fileName || item.title || '未命名文件'
+    const fileType = String(item.fileType || getFallbackType(title)).toLowerCase()
+    const typeMeta = this.getTypeMeta(fileType)
+    const modifiedAt = item.updatedAt || item.createdAt || ''
+    const authorText = item.author || item.ownerName || item.userName || item.nickname || this.data.userName || '系统用户'
+
+    return Object.assign({}, item, {
+      title,
+      fileType,
+      fileBadge: typeMeta.badge,
+      fileTheme: typeMeta.theme,
+      fileTypeLabel: typeMeta.label,
+      fileSizeText: this.formatSize(Number(item.fileSize) || 0),
+      authorText,
+      modifiedAtText: this.formatDate(modifiedAt),
+      modifiedAtValue: getTimeValue(modifiedAt),
+      previewText: String(item.docSummary || item.contentText || item.rawText || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 60),
+      isFavorite: Boolean(favoriteMap[item.id]),
+      searchText: [
+        title,
+        authorText,
+        typeMeta.label,
+        fileType,
+      ].join(' ').toLowerCase(),
+    })
+  },
+
+  getCategoryDocuments(list) {
+    const categoryKey = this.data.activeCategory
+    const nextList = list.slice()
+
+    if (categoryKey === 'favorite') {
+      return nextList.filter((item) => item.isFavorite)
+    }
+
+    return nextList.sort((left, right) => right.modifiedAtValue - left.modifiedAtValue).slice(0, 20)
+  },
+
+  applyFilters() {
+    const keyword = String(this.data.keyword || '').trim().toLowerCase()
+    const categoryList = this.getCategoryDocuments(this.data.allDocuments)
+    const documents = categoryList.filter((item) => {
+      if (!keyword) {
+        return true
+      }
+
+      return item.searchText.indexOf(keyword) !== -1
+    })
+
+    this.setData({
+      documents,
+      isEmpty: documents.length === 0,
+    })
   },
 
   async loadDocuments() {
     this.setData({ loading: true })
+
     try {
-      const selectedType = this.data.typeOptions[this.data.typeIndex]
-      const keyword = this.data.keyword.toLowerCase()
-
-      // /source/documents 返回当前用户全部文档（数组）
+      const favoriteMap = this.loadFavoriteMap()
       const res = await api.getSourceDocuments()
-      let rawList = res.data || []
+      const documents = (res.data || [])
+        .map((item) => this.buildDocument(item, favoriteMap))
+        .sort((left, right) => right.modifiedAtValue - left.modifiedAtValue)
 
-      // 客户端过滤类型
-      if (selectedType !== '全部类型') {
-        rawList = rawList.filter((item) => item.fileType === selectedType)
-      }
-      // 客户端关键词过滤
-      if (keyword) {
-        rawList = rawList.filter((item) =>
-          (item.fileName || '').toLowerCase().includes(keyword)
-        )
-      }
-
-      const list = rawList.map((item) => {
-        return Object.assign({}, item, {
-          // WXML 模板使用 title 字段，映射到 fileName
-          title: item.fileName || '',
-          createdAtText: this.formatDate(item.createdAt),
-          fileSizeText: this.formatSize(item.fileSize),
-        })
+      this.setData({
+        favoriteMap,
+        allDocuments: documents,
       })
-      this.setData({ documents: list })
+      this.applyFilters()
     } catch (err) {
-      wx.showToast({ title: '加载失败', icon: 'none' })
+      wx.showToast({ title: '文档加载失败', icon: 'none' })
     } finally {
       this.setData({ loading: false })
     }
   },
 
+  onKeywordInput(e) {
+    this.setData({
+      keyword: e.detail.value || '',
+    }, () => {
+      this.applyFilters()
+    })
+  },
+
+  clearKeyword() {
+    this.setData({
+      keyword: '',
+    }, () => {
+      this.applyFilters()
+    })
+  },
+
+  switchCategory(e) {
+    const activeCategory = e.currentTarget.dataset.key || 'recent'
+    this.setData({ activeCategory }, () => {
+      this.applyFilters()
+    })
+  },
+
   async chooseAndUpload() {
     try {
       const pick = await this.chooseMessageFileAsync({
-        count: 5,
+        count: 9,
         type: 'file',
-        extension: ['docx', 'xlsx', 'txt', 'md'],
+        extension: UPLOAD_EXTENSIONS,
       })
-
       const files = pick.tempFiles || []
+
       if (files.length === 0) {
         return
       }
 
-      wx.showLoading({ title: '上传中', mask: true })
-      for (let i = 0; i < files.length; i += 1) {
-        const file = files[i]
+      wx.showLoading({
+        title: '正在上传',
+        mask: true,
+      })
+
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index]
         await api.uploadDocument(file.path, file.name)
       }
-      wx.hideLoading()
-      wx.showToast({ title: '上传成功', icon: 'success' })
-      this.loadDocuments()
+
+      await this.loadDocuments()
+      wx.showToast({
+        title: '上传成功',
+        icon: 'success',
+      })
     } catch (err) {
+      if (err && err.errMsg && err.errMsg.indexOf('cancel') !== -1) {
+        return
+      }
+
+      wx.showToast({
+        title: '上传失败',
+        icon: 'none',
+      })
+    } finally {
       wx.hideLoading()
-      wx.showToast({ title: '上传失败', icon: 'none' })
     }
   },
 
-  previewDoc(e) {
-    const item = this.data.documents[e.currentTarget.dataset.index]
-    const content = item.docSummary || item.contentText || item.rawText || '暂无可预览内容'
+  getDocumentFromEvent(e) {
+    const index = Number(e.currentTarget.dataset.index)
+    if (!Number.isNaN(index) && this.data.documents[index]) {
+      return this.data.documents[index]
+    }
+
+    const id = e.currentTarget.dataset.id
+    if (id || id === 0) {
+      return this.findDocumentById(id)
+    }
+
+    return null
+  },
+
+  findDocumentById(id) {
+    const docId = String(id)
+    for (let index = 0; index < this.data.allDocuments.length; index += 1) {
+      const item = this.data.allDocuments[index]
+      if (String(item.id) === docId) {
+        return item
+      }
+    }
+
+    return null
+  },
+
+  previewDocumentItem(item) {
+    if (!item) {
+      return
+    }
+
+    const content = item.docSummary || item.contentText || item.rawText || item.previewText || '暂无可预览内容'
     wx.showModal({
       title: item.title || '文档预览',
       content: String(content).slice(0, 900),
@@ -133,30 +317,164 @@ Page({
     })
   },
 
-  openInChat(e) {
-    const item = this.data.documents[e.currentTarget.dataset.index]
+  previewDoc(e) {
+    this.previewDocumentItem(this.getDocumentFromEvent(e))
+  },
+
+  goChat() {
+    wx.removeStorageSync('docai_current_doc')
+    wx.switchTab({ url: '/pages/docai/chat/index' })
+  },
+
+  goDashboard() {
+    wx.switchTab({ url: '/pages/docai/dashboard/index' })
+  },
+
+  openChatWithItem(item) {
+    if (!item) {
+      return
+    }
+
     wx.setStorageSync('docai_current_doc', {
       id: item.id,
-      title: item.fileName || item.title || '',
+      title: item.title,
     })
     wx.switchTab({ url: '/pages/docai/chat/index' })
   },
 
-  deleteDoc(e) {
-    const id = e.currentTarget.dataset.id
+  toggleFavoriteByItem(item) {
+    if (!item) {
+      return
+    }
+
+    const favoriteMap = Object.assign({}, this.data.favoriteMap)
+    const docId = item.id
+    const nextValue = !favoriteMap[docId]
+
+    if (nextValue) {
+      favoriteMap[docId] = true
+    } else {
+      delete favoriteMap[docId]
+    }
+
+    this.saveFavoriteMap(favoriteMap)
+
+    const allDocuments = this.data.allDocuments.map((doc) => {
+      if (String(doc.id) !== String(docId)) {
+        return doc
+      }
+
+      return Object.assign({}, doc, {
+        isFavorite: nextValue,
+      })
+    })
+
+    this.setData({
+      favoriteMap,
+      allDocuments,
+    }, () => {
+      this.applyFilters()
+    })
+
+    wx.showToast({
+      title: nextValue ? '已收藏' : '已取消收藏',
+      icon: 'none',
+    })
+  },
+
+  deleteDocumentByItem(item) {
+    if (!item) {
+      return
+    }
+
     wx.showModal({
       title: '确认删除',
-      content: '删除后不可恢复，是否继续？',
+      content: '删除后无法恢复，是否继续？',
       success: async (res) => {
         if (!res.confirm) {
           return
         }
+
         try {
-          await api.deleteDocument(id)
-          wx.showToast({ title: '删除成功', icon: 'success' })
-          this.loadDocuments()
+          await api.deleteDocument(item.id)
+
+          const favoriteMap = Object.assign({}, this.data.favoriteMap)
+          if (favoriteMap[item.id]) {
+            delete favoriteMap[item.id]
+            this.saveFavoriteMap(favoriteMap)
+          }
+
+          await this.loadDocuments()
+          wx.showToast({
+            title: '删除成功',
+            icon: 'success',
+          })
         } catch (err) {
-          wx.showToast({ title: '删除失败', icon: 'none' })
+          wx.showToast({
+            title: '删除失败',
+            icon: 'none',
+          })
+        }
+      },
+    })
+  },
+
+  prepareShare() {
+    // empty handler for share button
+  },
+
+  onShareAppMessage(res) {
+    const item = res && res.from === 'button' && res.target
+      ? this.findDocumentById(res.target.dataset.id)
+      : null
+
+    return {
+      title: item ? '和你分享文档：' + item.title : '智能文档处理系统',
+      path: '/pages/docai/documents/index',
+    }
+  },
+
+  openMoreActions(e) {
+    const item = this.getDocumentFromEvent(e)
+    if (!item) {
+      return
+    }
+
+    const actions = [
+      '预览',
+      'AI 对话',
+      item.isFavorite ? '取消收藏' : '收藏',
+      '分享',
+      '删除',
+    ]
+
+    wx.showActionSheet({
+      itemList: actions,
+      success: (res) => {
+        const action = actions[res.tapIndex]
+
+        if (action === '预览') {
+          this.previewDocumentItem(item)
+          return
+        }
+
+        if (action === 'AI 对话') {
+          this.openChatWithItem(item)
+          return
+        }
+
+        if (action === '收藏' || action === '取消收藏') {
+          this.toggleFavoriteByItem(item)
+          return
+        }
+
+        if (action === '分享') {
+          wx.showToast({ title: '请点击文档卡片内分享入口', icon: 'none' })
+          return
+        }
+
+        if (action === '删除') {
+          this.deleteDocumentByItem(item)
         }
       },
     })

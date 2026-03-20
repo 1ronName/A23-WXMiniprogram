@@ -6,11 +6,51 @@ Page({
     loading: false,
     templatePath: '',
     templateName: '',
+    templateStatusText: '等待选择模板',
+    sourceDocCount: 0,
+    resultReady: false,
     resultText: '',
+    resultMeta: {
+      filledCount: 0,
+      blankCount: 0,
+      totalSlots: 0,
+      fillTimeMs: 0,
+      fileSizeText: '0 B',
+      templateName: '',
+    },
   },
 
   onShow() {
-    ensureLogin()
+    if (!ensureLogin()) {
+      return
+    }
+    this.loadSourceSummary()
+  },
+
+  formatSize(size) {
+    if (!size && size !== 0) {
+      return '-'
+    }
+
+    const kb = 1024
+    const mb = kb * 1024
+    if (size < kb) {
+      return size + ' B'
+    }
+    if (size < mb) {
+      return (size / kb).toFixed(1) + ' KB'
+    }
+    return (size / mb).toFixed(1) + ' MB'
+  },
+
+  async loadSourceSummary() {
+    try {
+      const res = await api.getSourceDocuments()
+      const list = res.data || []
+      this.setData({ sourceDocCount: list.length })
+    } catch (err) {
+      this.setData({ sourceDocCount: 0 })
+    }
   },
 
   async chooseTemplate() {
@@ -27,9 +67,12 @@ Page({
       this.setData({
         templatePath: file.path,
         templateName: file.name,
+        templateStatusText: '模板已就绪，可开始预览',
+        resultReady: false,
+        resultText: '',
       })
     } catch (err) {
-      wx.showToast({ title: '未选择文件', icon: 'none' })
+      wx.showToast({ title: '未选择模板文件', icon: 'none' })
     }
   },
 
@@ -37,50 +80,57 @@ Page({
     if (!ensureLogin()) {
       return
     }
+
     if (!this.data.templatePath) {
-      wx.showToast({ title: '请先选择模板', icon: 'none' })
+      wx.showToast({ title: '请先选择模板文件', icon: 'none' })
       return
     }
 
-    this.setData({ loading: true, resultText: '' })
+    this.setData({ loading: true, resultReady: false, resultText: '' })
+
     try {
-      // 第一步：上传模板，获取 templateId
-      wx.showLoading({ title: '上传模板中', mask: true })
+      wx.showLoading({ title: '正在上传模板', mask: true })
       const uploadRes = await api.uploadTemplateFile(this.data.templatePath, this.data.templateName)
       const templateId = (uploadRes.data && uploadRes.data.id) || uploadRes.id
       if (!templateId) {
-        throw new Error('模板上传失败，未返回模板ID')
+        throw new Error('模板上传失败，未返回模板 ID')
       }
 
-      // 第二步：解析模板槽位
-      wx.showLoading({ title: '解析模板中', mask: true })
+      wx.showLoading({ title: '正在解析模板', mask: true })
       await api.parseTemplateSlots(templateId)
 
-      // 第三步：获取用户源文档 ID 列表
       const sourceIds = await this.getSourceDocIds()
       if (sourceIds.length === 0) {
-        wx.showToast({ title: '暂无可用文档数据', icon: 'none' })
+        wx.showToast({ title: '当前没有可用的来源文档', icon: 'none' })
         return
       }
 
-      // 第四步：执行自动填表
-      wx.showLoading({ title: '自动填表中', mask: true })
+      wx.showLoading({ title: '正在生成预览', mask: true })
       const res = await api.fillTemplate(templateId, sourceIds)
       const data = res.data || {}
-      const summary = [
-        '填表完成！',
-        '已填槽位：' + (data.filledCount || 0),
-        '未填槽位：' + (data.blankCount || 0),
-        '总槽位数：' + (data.totalSlots || 0),
-        '模板ID：' + templateId,
-      ].join('\n')
-      this.setData({ resultText: summary })
-      wx.showToast({ title: '填表完成', icon: 'success' })
+
+      this.setData({
+        resultReady: true,
+        resultText: [
+          '本次预览已完成。',
+          '系统已基于当前模板和来源文档返回填表摘要，可继续用于演示或验证字段匹配效果。',
+        ].join('\n'),
+        resultMeta: {
+          filledCount: data.filledCount || 0,
+          blankCount: data.blankCount || 0,
+          totalSlots: data.totalSlots || 0,
+          fillTimeMs: data.fillTimeMs || 0,
+          fileSizeText: this.formatSize(data.fileSize || 0),
+          templateName: data.templateName || this.data.templateName || '',
+        },
+      })
+      wx.showToast({ title: '预览生成完成', icon: 'success' })
     } catch (err) {
       this.setData({
-        resultText: (err && err.message) || '填表失败',
+        resultReady: true,
+        resultText: (err && err.message) || '智能填表失败，请稍后重试。',
       })
-      wx.showToast({ title: '填表失败', icon: 'none' })
+      wx.showToast({ title: '智能填表失败', icon: 'none' })
     } finally {
       wx.hideLoading()
       this.setData({ loading: false })

@@ -1,200 +1,191 @@
 const { request, uploadFile } = require('../utils/request')
 
-// ==================== 用户认证 ====================
+let lastTemplateFile = null
 
-/**
- * 统一认证（登录/注册）。后端自动识别：username+password 模式下若用户不存在则注册。
- */
-function authLogin(data) {
-  return request({
-    url: '/users/auth',
-    method: 'POST',
+function normalizeDocument(item) {
+  if (!item) {
+    return item
+  }
+
+  return Object.assign({}, item, {
+    fileName: item.fileName || item.title || '',
+    docSummary: item.docSummary || item.contentText || '',
+  })
+}
+
+function wrapSuccess(data) {
+  return Promise.resolve({
+    code: 200,
+    message: 'success',
     data,
   })
 }
 
-/**
- * 注册（与 authLogin 调用同一个统一认证接口）
- */
+function authLogin(data) {
+  return request({
+    url: '/auth/login',
+    method: 'POST',
+    data: {
+      username: data.username,
+      password: data.password,
+    },
+  }).then(function (res) {
+    var payload = res.data || {}
+    return Object.assign({}, res, {
+      data: Object.assign({}, payload, {
+        userName: payload.userName || payload.username || '',
+        email: payload.email || '',
+      }),
+    })
+  })
+}
+
 function authRegister(data) {
   return request({
-    url: '/users/auth',
+    url: '/auth/register',
     method: 'POST',
-    // 仅传 username / password，后端不支持 nickname 字段
-    data: { username: data.username, password: data.password },
+    data: {
+      username: data.username,
+      password: data.password,
+      nickname: data.nickname || data.username,
+    },
   })
 }
 
 function getCurrentUser() {
-  return request({ url: '/users/info' })
+  return request({ url: '/auth/me' })
 }
 
 function userLogout() {
-  return request({ url: '/users/logout', method: 'POST' })
+  return wrapSuccess(true)
 }
-
-// ==================== 源文档 ====================
 
 function getSourceDocuments() {
-  return request({ url: '/source/documents' })
+  return request({
+    url: '/documents',
+    data: {
+      page: 1,
+      size: 1000,
+    },
+  }).then(function (res) {
+    var pageData = res.data || {}
+    var records = pageData.records || []
+    return Object.assign({}, res, {
+      data: records.map(normalizeDocument),
+    })
+  })
 }
 
-/** 保持向后兼容，忽略 params（服务端不支持过滤，统一返回全部列表） */
 function getDocuments() {
   return getSourceDocuments()
 }
 
 function getDocument(id) {
-  return request({ url: '/source/' + id })
-}
-
-/**
- * 统计各类型文档数量（客户端计算）
- */
-function getDocumentStats() {
-  return getSourceDocuments().then(function (res) {
-    var docs = res.data || []
+  return request({ url: '/documents/' + id }).then(function (res) {
     return Object.assign({}, res, {
-      data: {
-        total: docs.length,
-        docx: docs.filter(function (d) { return d.fileType === 'docx' }).length,
-        xlsx: docs.filter(function (d) { return d.fileType === 'xlsx' }).length,
-        txt: docs.filter(function (d) { return d.fileType === 'txt' }).length,
-        md: docs.filter(function (d) { return d.fileType === 'md' }).length,
-      },
+      data: normalizeDocument(res.data),
     })
   })
+}
+
+function getDocumentStats() {
+  return request({ url: '/documents/stats' })
 }
 
 function uploadDocument(filePath, fileName) {
   return uploadFile({
-    url: '/source/upload',
+    url: '/documents/upload',
     filePath: filePath,
     name: 'file',
-    formData: { fileName: fileName },
+    formData: { fileName: fileName || '' },
+  }).then(function (res) {
+    if (res && res.data) {
+      return Object.assign({}, res, {
+        data: normalizeDocument(res.data),
+      })
+    }
+    return normalizeDocument(res)
   })
 }
 
 function deleteDocument(id) {
-  return request({ url: '/source/' + id, method: 'DELETE' })
+  return request({ url: '/documents/' + id, method: 'DELETE' })
 }
 
 function batchDeleteDocuments(docIds) {
-  return request({ url: '/source/batch-delete', method: 'POST', data: { docIds: docIds } })
+  return request({ url: '/documents/batch', method: 'DELETE', data: docIds || [] })
 }
 
-// ==================== 模板自动填表 ====================
-
 function uploadTemplateFile(filePath, fileName) {
-  return uploadFile({
-    url: '/template/upload',
+  lastTemplateFile = {
+    id: 'local-template',
     filePath: filePath,
-    name: 'file',
-    formData: { fileName: fileName },
+    fileName: fileName,
+  }
+
+  return wrapSuccess({
+    id: lastTemplateFile.id,
+    fileName: fileName,
   })
 }
 
 function parseTemplateSlots(templateId) {
-  return request({ url: '/template/' + templateId + '/parse', method: 'POST' })
-}
-
-function fillTemplate(templateId, docIds) {
-  return request({
-    url: '/template/' + templateId + '/fill',
-    method: 'POST',
-    data: { docIds: docIds || [] },
+  return wrapSuccess({
+    id: templateId,
+    parsed: true,
   })
 }
 
-function listTemplateFiles() {
-  return request({ url: '/template/list' })
-}
+function fillTemplate(templateId, docIds) {
+  if (!lastTemplateFile || !lastTemplateFile.filePath) {
+    return Promise.reject({ message: '请先选择模板文件' })
+  }
 
-function getTemplateAudit(templateId) {
-  return request({ url: '/template/' + templateId + '/audit' })
-}
-
-function getTemplateDecisions(templateId) {
-  return request({ url: '/template/' + templateId + '/decisions' })
-}
-
-// ==================== AI 对话 ====================
-
-/**
- * 调用 /ai/chat/stream（SSE 接口）。
- * 小程序不支持 SSE 流式接收，使用 wx.request 等待全部响应后解析 complete 事件。
- * 参数兼容旧格式 { message, documentId } 与新格式 { userInput, fileId }。
- */
-function aiChat(data) {
-  return new Promise(function (resolve, reject) {
-    var config = require('../config')
-    var app = typeof getApp === 'function' ? getApp() : null
-    var baseUrl = (app && app.globalData && app.globalData.apiBaseUrl) || config.apiBaseUrl
-    var token = wx.getStorageSync('token') || ''
-
-    wx.request({
-      url: baseUrl + '/ai/chat/stream',
-      method: 'POST',
+  return uploadFile({
+    url: '/autofill/preview',
+    filePath: lastTemplateFile.filePath,
+    name: 'template',
+    formData: {
+      sourceDocIds: (docIds || []).join(','),
+    },
+    timeout: 300000,
+  }).then(function (res) {
+    var payload = (res && res.data) || {}
+    return Object.assign({}, res, {
       data: {
-        userInput: data.message || data.userInput || '',
-        fileId: data.documentId || data.fileId || null,
-      },
-      header: {
-        'Content-Type': 'application/json',
-        Authorization: token ? 'Bearer ' + token : '',
-      },
-      timeout: 300000,
-      responseType: 'text',
-      success: function (res) {
-        var text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data || '')
-        var finalText = _parseSseComplete(text)
-        resolve({ data: { reply: finalText } })
-      },
-      fail: function (err) {
-        reject({ message: err.errMsg || 'AI 请求失败' })
+        filledCount: payload.sourceDocCount || 0,
+        blankCount: 0,
+        totalSlots: payload.sourceDocCount || 0,
+        templateName: payload.templateName || lastTemplateFile.fileName || '',
+        fillTimeMs: payload.fillTimeMs || 0,
+        fileSize: payload.fileSize || 0,
       },
     })
   })
 }
 
-/**
- * 从 SSE 文本中提取 complete 事件携带的 aiResponse 内容
- */
-function _parseSseComplete(sseText) {
-  var finalText = ''
-  var blocks = sseText.split('\n\n')
-  for (var i = 0; i < blocks.length; i++) {
-    var block = blocks[i]
-    var lines = block.split('\n')
-    var eventName = ''
-    var dataLine = ''
-    for (var j = 0; j < lines.length; j++) {
-      var line = lines[j]
-      if (line.indexOf('event:') === 0) {
-        eventName = line.slice(6).trim()
-      } else if (line.indexOf('data:') === 0) {
-        dataLine += line.slice(5).trim()
-      }
-    }
-    if (!dataLine) continue
-    try {
-      var payload = JSON.parse(dataLine)
-      if (payload.error) return payload.error
-      if (eventName === 'complete' || payload.eventType === 'complete') {
-        var result = payload.result || {}
-        finalText = result.aiResponse || payload.aiResponseContent || ''
-        if (!finalText && Array.isArray(result.resultData) && result.resultData.length > 0) {
-          finalText = JSON.stringify(result.resultData, null, 2)
-        }
-      }
-      if (!finalText && payload.aiResponseContent) {
-        finalText = payload.aiResponseContent
-      }
-    } catch (e) {
-      // 忽略解析异常
-    }
-  }
-  return finalText || 'AI 已完成处理，但未返回可展示文本。'
+function listTemplateFiles() {
+  return wrapSuccess([])
+}
+
+function getTemplateAudit(templateId) {
+  return wrapSuccess({ templateId: templateId, supported: false })
+}
+
+function getTemplateDecisions(templateId) {
+  return wrapSuccess({ templateId: templateId, supported: false })
+}
+
+function aiChat(data) {
+  return request({
+    url: '/ai/chat',
+    method: 'POST',
+    data: {
+      message: data.message || data.userInput || '',
+      documentId: data.documentId || data.fileId || null,
+    },
+    timeout: 300000,
+  })
 }
 
 module.exports = {

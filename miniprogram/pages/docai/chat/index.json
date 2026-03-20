@@ -1,5 +1,6 @@
 {
-  "navigationBarTitleText": "AI 对话",
-  "navigationBarBackgroundColor": "#ffffff",
-  "navigationBarTextStyle": "black"
+  "navigationStyle": "custom",
+  "disableScroll": true,
+  "navigationBarTitleText": "智能问答",
+  "backgroundColor": "#f4f7fd"
 }

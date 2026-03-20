@@ -1,66 +1,122 @@
-<view class="page">
-  <view class="hero">
-    <view class="hero-head">
-      <view class="hero-title">DocAI 智能文档处理系统</view>
-      <button class="logout-btn" size="mini" bindtap="logout">退出登录</button>
-    </view>
-    <view class="hero-desc">整合 AI 大模型，支持文档管理、信息提取、智能填表与对话问答</view>
-  </view>
+<view class="doc-page">
+  <view class="page-shell">
+    <view class="hero-card dashboard-hero rise-in">
+      <view class="hero-kicker">Workspace</view>
+      <view class="hero-title">你好，{{userName}}</view>
+      <view class="hero-desc">
+        把上传资料、清洗内容、智能填表和 AI 问答串成一条更顺手的工作流，方便你在手机端快速推进项目调试和演示。
+      </view>
 
-  <view class="stats-grid">
-    <view class="stat-card">
-      <view class="stat-value">{{stats.total}}</view>
-      <view class="stat-label">总文档数</view>
-    </view>
-    <view class="stat-card">
-      <view class="stat-value">{{stats.docx}}</view>
-      <view class="stat-label">Word 文档</view>
-    </view>
-    <view class="stat-card">
-      <view class="stat-value">{{stats.xlsx}}</view>
-      <view class="stat-label">Excel 文档</view>
-    </view>
-    <view class="stat-card">
-      <view class="stat-value">{{stats.txt + stats.md}}</view>
-      <view class="stat-label">文本文件</view>
-    </view>
-  </view>
+      <view class="dashboard-chip-row">
+        <view class="chip">本地服务联调中</view>
+        <view class="chip">最近更新 {{lastUpdated}}</view>
+      </view>
 
-  <view class="section-title">核心流程</view>
-  <view class="flow-box">
-    <view class="flow-item">
-      <view class="flow-index">1</view>
-      <view class="flow-content">
-        <view class="flow-title">上传文档</view>
-        <view class="flow-desc">在文档页上传待处理资料</view>
+      <view class="hero-actions">
+        <button class="solid-btn inline-btn dashboard-hero-btn" bindtap="goDocuments">去上传文档</button>
+        <button class="outline-btn inline-btn dashboard-hero-btn" bindtap="loadStats">刷新概览</button>
+        <button class="ghost-btn inline-btn dashboard-hero-btn dashboard-hero-btn--light" bindtap="logout">退出登录</button>
       </view>
     </view>
-    <view class="flow-item">
-      <view class="flow-index">2</view>
-      <view class="flow-content">
-        <view class="flow-title">AI 提取信息</view>
-        <view class="flow-desc">自动解析文档并抽取关键字段</view>
+
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">概览面板</view>
+          <view class="section-subtitle">先看资料量级，再决定接下来要清理文档、发起问答还是直接智能填表。</view>
+        </view>
+      </view>
+
+      <view class="metric-grid dashboard-grid">
+        <view class="metric-card dashboard-metric dashboard-metric--primary">
+          <view class="metric-value">{{stats.total}}</view>
+          <view class="metric-label">已归档文档</view>
+          <view class="metric-note">当前账号下全部资料数量</view>
+        </view>
+        <view class="metric-card dashboard-metric dashboard-metric--cool">
+          <view class="metric-value">{{stats.docx + stats.xlsx}}</view>
+          <view class="metric-label">结构化材料</view>
+          <view class="metric-note">Word 与 Excel 适合继续做填表</view>
+        </view>
+        <view class="metric-card dashboard-metric dashboard-metric--warm">
+          <view class="metric-value">{{stats.txt + stats.md}}</view>
+          <view class="metric-label">文本资料</view>
+          <view class="metric-note">适合摘要、问答和要点提取</view>
+        </view>
+        <view class="metric-card dashboard-metric dashboard-metric--plain">
+          <view class="metric-value">{{lastUpdated}}</view>
+          <view class="metric-label">最近同步</view>
+          <view class="metric-note">刷新后会更新最新概览时间</view>
+        </view>
       </view>
     </view>
-    <view class="flow-item">
-      <view class="flow-index">3</view>
-      <view class="flow-content">
-        <view class="flow-title">上传模板</view>
-        <view class="flow-desc">选择 Word/Excel 模板进行匹配</view>
+
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">快捷入口</view>
+          <view class="section-subtitle">按照常见使用习惯，把最容易连续发生的动作放到同一屏里。</view>
+        </view>
+      </view>
+
+      <view class="action-grid">
+        <view class="action-card" bindtap="goDocuments">
+          <view class="card-label">文档</view>
+          <view class="card-title">上传与整理资料</view>
+          <view class="card-desc">进入文档中心，完成筛选、预览、删除和对话入口跳转。</view>
+          <view class="card-link">打开文档中心</view>
+        </view>
+        <view class="action-card" bindtap="goAutofill">
+          <view class="card-label">填表</view>
+          <view class="card-title">发起智能填表</view>
+          <view class="card-desc">上传模板后自动匹配来源文档，快速验证填表结果。</view>
+          <view class="card-link">进入填表页</view>
+        </view>
+        <view class="action-card" bindtap="goChat">
+          <view class="card-label">问答</view>
+          <view class="card-title">直接询问文档内容</view>
+          <view class="card-desc">支持普通问答，也支持绑定某一份文档做定向提问。</view>
+          <view class="card-link">进入对话页</view>
+        </view>
+        <view class="action-card" bindtap="goDocuments">
+          <view class="card-label">联调</view>
+          <view class="card-title">先走上传再测试链路</view>
+          <view class="card-desc">建议先上传一批测试资料，再去填表和问答，结果会更稳定。</view>
+          <view class="card-link">继续准备数据</view>
+        </view>
       </view>
     </view>
-    <view class="flow-item">
-      <view class="flow-index">4</view>
-      <view class="flow-content">
-        <view class="flow-title">自动填表</view>
-        <view class="flow-desc">根据提取数据智能完成填写</view>
+
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">推荐流程</view>
+          <view class="section-subtitle">更符合现在同类效率工具的使用节奏，减少来回跳转和信息断层。</view>
+        </view>
       </view>
-    </view>
-    <view class="flow-item">
-      <view class="flow-index">5</view>
-      <view class="flow-content">
-        <view class="flow-title">下载结果</view>
-        <view class="flow-desc">预览并导出最终文档</view>
+
+      <view class="info-list">
+        <view class="info-row">
+          <view class="info-index">1</view>
+          <view class="info-content">
+            <view class="info-title">先上传来源文档</view>
+            <view class="info-desc">文档中心支持快速筛选和预览，是后续问答与填表的基础数据入口。</view>
+          </view>
+        </view>
+        <view class="info-row">
+          <view class="info-index">2</view>
+          <view class="info-content">
+            <view class="info-title">再做定向问答</view>
+            <view class="info-desc">如果需要验证解析效果，先把文档带入 AI 对话页会更直观。</view>
+          </view>
+        </view>
+        <view class="info-row">
+          <view class="info-index">3</view>
+          <view class="info-content">
+            <view class="info-title">最后预览填表结果</view>
+            <view class="info-desc">模板准备好以后，直接用已有来源文档做自动填表，更接近演示场景。</view>
+          </view>
+        </view>
       </view>
     </view>
   </view>

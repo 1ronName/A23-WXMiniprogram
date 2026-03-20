@@ -1,5 +1,5 @@
 {
-  "projectname": "WeChatMiniprogram",
+  "projectname": "A23-WXMiniprogram",
   "setting": {
     "urlCheck": false,
     "coverView": true,
@@ -16,7 +16,8 @@
     "bigPackageSizeSupport": false,
     "checkInvalidKey": true,
     "useIsolateContext": false,
-    "ignoreDevUnusedFiles": true
+    "ignoreDevUnusedFiles": true,
+    "useApiHostProcess": true
   },
   "libVersion": "3.14.2",
   "condition": {}
