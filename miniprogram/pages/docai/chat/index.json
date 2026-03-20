@@ -1,4 +1,6 @@
 {
-  "navigationBarTitleText": "智能问答",
-  "backgroundColor": "#f7f0e4"
+  "navigationStyle": "custom",
+  "disableScroll": true,
+  "navigationBarTitleText": "\u667a\u80fd\u95ee\u7b54",
+  "backgroundColor": "#f5f7fb"
 }
