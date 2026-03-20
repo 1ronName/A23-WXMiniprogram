@@ -18,6 +18,16 @@
     </view>
   </view>
   <view class="page-shell home-shell">
+    <view class="panel rise-in document-user-panel">
+      <view class="document-user-card">
+        <view class="document-user-avatar">{{avatarText}}</view>
+        <view class="document-user-copy">
+          <view class="document-user-label">当前账号</view>
+          <view class="document-user-name">{{userName}}</view>
+        </view>
+      </view>
+    </view>
+
     <view class="search-card rise-in">
       <view class="search-icon">
         <view class="search-icon-circle"></view>

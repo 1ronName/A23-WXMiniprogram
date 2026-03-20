@@ -95,20 +95,5 @@
       </view>
     </view>
 
-    <view class="panel rise-in">
-      <view class="section-title">账号信息</view>
-
-      <view class="dashboard-user-card">
-        <view class="dashboard-user-avatar">{{avatarText}}</view>
-        <view class="dashboard-user-copy">
-          <view class="dashboard-user-label">当前账号</view>
-          <view class="dashboard-user-name">{{userName}}</view>
-        </view>
-      </view>
-
-      <view class="dashboard-account-actions">
-        <button class="warn-btn inline-btn" bindtap="logout">退出登录</button>
-      </view>
-    </view>
   </view>
 </view>
