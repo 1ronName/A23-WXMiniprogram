@@ -1,3 +1,4 @@
+const api = require('../../../api/docai')
 const { ensureLogin } = require('../../../utils/auth')
 
 Page({
@@ -15,11 +16,38 @@ Page({
     this.loadUser()
   },
 
-  loadUser() {
+  async loadUser() {
     const app = getApp()
     const appUser = (app && app.globalData && app.globalData.user) || null
     const cachedUser = wx.getStorageSync('user') || null
     const user = appUser || cachedUser || {}
+
+    this.applyUser(user)
+
+    try {
+      const res = await api.getCurrentUser()
+      const latestUser = res.data || {}
+      const mergedUser = Object.assign({}, user, {
+        id: latestUser.userId || latestUser.id || user.id || '',
+        username: latestUser.username || latestUser.userName || user.username || '',
+        userName: latestUser.userName || latestUser.username || user.userName || '',
+        nickname: latestUser.nickname || latestUser.userName || latestUser.username || user.nickname || '',
+        email: latestUser.email || user.email || '',
+      })
+
+      if (app && app.setAuth) {
+        app.setAuth(wx.getStorageSync('token') || '', mergedUser)
+      } else {
+        wx.setStorageSync('user', mergedUser)
+      }
+
+      this.applyUser(mergedUser)
+    } catch (err) {
+      // keep cached profile when backend user info request fails
+    }
+  },
+
+  applyUser(user) {
     const userName = user.nickname || user.username || user.userName || '团队成员'
     const userEmail = user.email || ''
     const avatarText = String(userName || '团').trim().slice(0, 1).toUpperCase() || '团'
@@ -40,13 +68,17 @@ Page({
           return
         }
 
-        const app = getApp()
-        if (app && app.clearAuth) {
-          app.clearAuth()
-        }
+        Promise.resolve(api.userLogout()).catch(() => null).finally(() => {
+          const app = getApp()
+          if (app && app.clearAuth) {
+            app.clearAuth()
+          }
 
-        wx.removeStorageSync('docai_current_doc')
-        wx.reLaunch({ url: '/pages/docai/login/index' })
+          wx.removeStorageSync('docai_current_doc')
+          wx.removeStorageSync('docai_chat_sessions')
+          wx.removeStorageSync('docai_chat_current_session_id')
+          wx.reLaunch({ url: '/pages/docai/login/index' })
+        })
       },
     })
   },

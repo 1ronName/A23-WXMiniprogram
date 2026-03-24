@@ -4,7 +4,7 @@
       <view class="hero-kicker">DocAI Workspace</view>
       <view class="auth-title">把资料整理、字段抽取和智能问答放进同一条移动工作流</view>
       <view class="auth-desc">
-        这套界面围绕真实使用习惯重做，更强调一步到位的上传、查询、问答与填表体验，方便团队本地联调和现场演示。
+        小程序现已直接对接 DocAI 文档里的 `/api/v1` 后端接口，登录、文档上传、智能问答和模板填表都走同一套服务。
       </view>
     </view>
 
@@ -26,8 +26,8 @@
       </view>
       <view class="auth-feature">
         <view class="feature-badge">04</view>
-        <view class="feature-title">本地联调优先</view>
-        <view class="feature-desc">围绕当前本地服务和接口组织入口。</view>
+        <view class="feature-title">DocAI 后端直连</view>
+        <view class="feature-desc">围绕 DocAI 网关接口组织入口和联调流程。</view>
       </view>
     </view>
 
@@ -63,17 +63,6 @@
         />
       </view>
 
-      <view class="field-block" wx:if="{{!isLogin}}">
-        <view class="field-label">显示昵称</view>
-        <input
-          class="auth-input"
-          placeholder-class="auth-placeholder"
-          placeholder="可选，不填则默认使用用户名"
-          value="{{nickname}}"
-          bindinput="onNicknameInput"
-        />
-      </view>
-
       <view class="field-block">
         <view class="field-label">密码</view>
         <input
@@ -103,8 +92,6 @@
       </button>
 
       <view class="auth-tip">{{modeTip}}</view>
-
-      <view class="dev-entry" bindtap="devQuickEnter">开发者快速进入</view>
     </view>
   </view>
 </view>

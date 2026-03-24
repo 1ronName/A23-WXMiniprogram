@@ -2,7 +2,7 @@ const api = require('../../../api/docai')
 const { ensureLogin } = require('../../../utils/auth')
 
 const FAVORITE_STORAGE_KEY = 'docai_document_favorites'
-const UPLOAD_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'pdf', 'md', 'txt']
+const UPLOAD_EXTENSIONS = ['docx', 'xlsx', 'md', 'txt']
 const CATEGORIES = [
   { key: 'recent', label: '最近' },
   { key: 'favorite', label: '收藏' },
@@ -30,6 +30,28 @@ function getFallbackType(fileName) {
   }
 
   return String(parts.pop() || '').toLowerCase()
+}
+
+function getUploadStatusText(status) {
+  const normalizedStatus = String(status || '').toLowerCase()
+
+  if (normalizedStatus === 'parsed') {
+    return '已解析'
+  }
+
+  if (normalizedStatus === 'parsing') {
+    return '解析中'
+  }
+
+  if (normalizedStatus === 'failed') {
+    return '解析失败'
+  }
+
+  if (!normalizedStatus) {
+    return '待处理'
+  }
+
+  return status
 }
 
 Page({
@@ -138,10 +160,16 @@ Page({
     const typeMeta = this.getTypeMeta(fileType)
     const modifiedAt = item.updatedAt || item.createdAt || ''
     const authorText = item.author || item.ownerName || item.userName || item.nickname || this.data.userName || '系统用户'
+    const statusText = getUploadStatusText(item.uploadStatus)
+    const previewText = String(item.docSummary || item.contentText || item.rawText || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 60)
 
     return Object.assign({}, item, {
       title,
       fileType,
+      statusText,
       fileBadge: typeMeta.badge,
       fileTheme: typeMeta.theme,
       fileTypeLabel: typeMeta.label,
@@ -149,16 +177,15 @@ Page({
       authorText,
       modifiedAtText: this.formatDate(modifiedAt),
       modifiedAtValue: getTimeValue(modifiedAt),
-      previewText: String(item.docSummary || item.contentText || item.rawText || '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 60),
+      previewText,
       isFavorite: Boolean(favoriteMap[item.id]),
       searchText: [
         title,
         authorText,
         typeMeta.label,
         fileType,
+        statusText,
+        previewText,
       ].join(' ').toLowerCase(),
     })
   },
@@ -261,7 +288,7 @@ Page({
 
       await this.loadDocuments()
       wx.showToast({
-        title: '上传成功',
+        title: '上传成功，后台正在解析',
         icon: 'success',
       })
     } catch (err) {
@@ -309,7 +336,16 @@ Page({
       return
     }
 
-    const content = item.docSummary || item.contentText || item.rawText || item.previewText || '暂无可预览内容'
+    const summary = item.docSummary || item.contentText || item.rawText || item.previewText || ''
+    const content = [
+      '状态：' + getUploadStatusText(item.uploadStatus),
+      summary
+        ? '\n' + String(summary).slice(0, 820)
+        : '\n' + (item.uploadStatus === 'parsing'
+          ? '文档已上传，DocAI 正在后台抽取字段，请稍后刷新列表再查看摘要或用于智能填表。'
+          : '当前暂无可预览摘要。'),
+    ].join('')
+
     wx.showModal({
       title: item.title || '文档预览',
       content: String(content).slice(0, 900),

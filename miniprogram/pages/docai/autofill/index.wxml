@@ -4,11 +4,11 @@
       <view class="hero-kicker">Auto Fill</view>
       <view class="hero-title">智能填表</view>
       <view class="hero-desc">
-        模板选择、来源文档数量和预览结果放在同一条链路里，更贴近报名表、汇总表和申报材料的真实使用场景。
+        模板选择、已解析来源文档数量和填表结果放在同一条链路里，更贴近报名表、汇总表和申报材料的真实使用场景。
       </view>
       <view class="hero-actions">
         <button class="solid-btn inline-btn" bindtap="chooseTemplate">选择模板</button>
-        <button class="outline-btn inline-btn autofill-hero-outline" loading="{{loading}}" bindtap="startFill">开始预览</button>
+        <button class="outline-btn inline-btn autofill-hero-outline" loading="{{loading}}" bindtap="startFill">开始填充</button>
       </view>
     </view>
 
@@ -31,15 +31,15 @@
         <view class="info-row">
           <view class="info-index">2</view>
           <view class="info-content">
-            <view class="info-title">系统自动读取来源文档</view>
-            <view class="info-desc">会从当前账号已上传的文档中选择最多 10 份作为填表数据来源。</view>
+            <view class="info-title">系统读取已解析来源文档</view>
+            <view class="info-desc">会从当前账号已解析完成的文档中选择最多 10 份作为填表数据来源。</view>
           </view>
         </view>
         <view class="info-row">
           <view class="info-index">3</view>
           <view class="info-content">
-            <view class="info-title">返回可展示的预览摘要</view>
-            <view class="info-desc">你可以直接查看填表统计和模板信息，适合做联调验证和演示讲解。</view>
+            <view class="info-title">返回真实填表摘要</view>
+            <view class="info-desc">你可以直接查看填表统计、审计编号和结果文件信息，适合联调验证和演示讲解。</view>
           </view>
         </view>
       </view>
@@ -49,9 +49,9 @@
       <view class="section-head">
         <view>
           <view class="section-title">模板与数据源</view>
-          <view class="section-subtitle">模板状态和来源文档量级集中展示，减少页面间来回跳转。</view>
+          <view class="section-subtitle">模板状态和可参与填表的已解析文档集中展示，减少页面间来回跳转。</view>
         </view>
-        <view class="pill">{{sourceDocCount}} 份来源文档</view>
+        <view class="pill">{{sourceDocCount}} 份已解析文档</view>
       </view>
 
       <view class="autofill-status-grid">
@@ -66,15 +66,15 @@
       </view>
 
       <view class="autofill-note">
-        提示：建议先在文档中心上传好测试资料，再回来执行智能填表，这样预览结果会更稳定。
+        提示：建议先在文档中心上传好测试资料并等待解析完成，再回来执行智能填表，这样结果会更稳定。
       </view>
     </view>
 
     <view class="panel rise-in" wx:if="{{resultReady}}">
       <view class="section-head">
         <view>
-          <view class="section-title">预览结果</view>
-          <view class="section-subtitle">返回的是适合移动端查看的摘要结果，不会把复杂信息挤在一行里。</view>
+          <view class="section-title">填表结果</view>
+          <view class="section-subtitle">返回的是适合移动端查看的填表摘要，不会把复杂信息挤在一行里。</view>
         </view>
       </view>
 
@@ -103,7 +103,7 @@
 
       <view class="autofill-result-meta">
         <view class="autofill-result-item">模板名称：{{resultMeta.templateName || templateName || '未返回'}}</view>
-        <view class="autofill-result-item">结果文件大小：{{resultMeta.fileSizeText}}</view>
+        <view class="autofill-result-item">模板文件大小：{{resultMeta.fileSizeText}}</view>
       </view>
 
       <text class="autofill-result-text">{{resultText}}</text>

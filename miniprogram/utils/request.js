@@ -1,70 +1,189 @@
 const config = require('../config')
 
+function getAppSafe() {
+  try {
+    return getApp()
+  } catch (err) {
+    return null
+  }
+}
+
+function normalizeBaseUrl(url) {
+  return String(url || '').trim().replace(/\/+$/, '')
+}
+
+function uniqueUrls(list) {
+  const result = []
+
+  ;(list || []).forEach((item) => {
+    const value = normalizeBaseUrl(item)
+    if (!value || result.indexOf(value) !== -1) {
+      return
+    }
+    result.push(value)
+  })
+
+  return result
+}
+
+function getConfiguredBaseUrls() {
+  return uniqueUrls([config.apiBaseUrl].concat(config.apiBaseFallbackUrls || []))
+}
+
+function getBaseUrlCandidates() {
+  const app = getAppSafe()
+  const globalData = (app && app.globalData) || {}
+  const cachedBaseUrl = wx.getStorageSync('docai_api_base_url') || ''
+
+  return uniqueUrls([
+    globalData.apiBaseUrl,
+    config.apiBaseUrl,
+    globalData.activeApiBaseUrl,
+    cachedBaseUrl,
+  ].concat(config.apiBaseFallbackUrls || []))
+}
+
 function getBaseUrl() {
-  const app = getApp()
-  return (app && app.globalData && app.globalData.apiBaseUrl) || config.apiBaseUrl
+  return getBaseUrlCandidates()[0] || normalizeBaseUrl(config.apiBaseUrl)
 }
 
-function normalizeUrl(url) {
+function setActiveBaseUrl(baseUrl) {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+  const app = getAppSafe()
+
+  if (app && app.globalData) {
+    app.globalData.activeApiBaseUrl = normalizedBaseUrl
+  }
+
+  wx.setStorageSync('docai_api_base_url', normalizedBaseUrl)
+}
+
+function normalizeUrl(url, baseUrl) {
   if (/^https?:\/\//.test(url)) {
-    return url
+    return normalizeBaseUrl(url)
   }
-  const base = getBaseUrl()
+
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl || getBaseUrl())
   if (url.startsWith('/')) {
-    return base + url
+    return normalizedBaseUrl + url
   }
-  return base + '/' + url
+
+  return normalizedBaseUrl + '/' + url
 }
 
-function request(options) {
-  const method = options.method || 'GET'
+function clearAuth() {
+  const app = getAppSafe()
+  if (app && app.clearAuth) {
+    app.clearAuth()
+    return
+  }
+
+  wx.removeStorageSync('token')
+  wx.removeStorageSync('user')
+}
+
+function createHeader(options) {
+  const method = String(options.method || 'GET').toUpperCase()
   const token = wx.getStorageSync('token') || ''
   const header = Object.assign({}, options.header || {})
+
+  if (
+    !header['Content-Type']
+    && !header['content-type']
+    && !options.skipJsonContentType
+    && method !== 'UPLOAD'
+  ) {
+    header['Content-Type'] = 'application/json'
+  }
 
   if (token) {
     header.Authorization = 'Bearer ' + token
   }
 
+  return header
+}
+
+function buildRequestError(statusCode, data, fallbackMessage) {
+  const message = (data && data.message) || fallbackMessage || 'request failed'
+  return {
+    statusCode,
+    data,
+    message,
+  }
+}
+
+function normalizeResponse(statusCode, data, fallbackMessage) {
+  if (typeof data === 'object' && data !== null && Object.prototype.hasOwnProperty.call(data, 'code')) {
+    if (data.code === 401) {
+      clearAuth()
+    }
+
+    if (data.code === 200) {
+      return {
+        ok: true,
+        data,
+      }
+    }
+
+    return {
+      ok: false,
+      error: buildRequestError(statusCode, data, fallbackMessage),
+    }
+  }
+
+  if (statusCode === 401) {
+    clearAuth()
+  }
+
+  if (statusCode >= 200 && statusCode < 300) {
+    return {
+      ok: true,
+      data,
+    }
+  }
+
+  return {
+    ok: false,
+    error: buildRequestError(statusCode, data, fallbackMessage),
+  }
+}
+
+function shouldRetry(err) {
+  if (!err) {
+    return false
+  }
+
+  if (err.statusCode === 0) {
+    return true
+  }
+
+  const message = String(err.message || '').toLowerCase()
+  return message.indexOf('timeout') !== -1
+    || message.indexOf('network') !== -1
+    || message.indexOf('fail') !== -1
+    || message.indexOf('refused') !== -1
+}
+
+function performRequest(baseUrl, options) {
+  const method = String(options.method || 'GET').toUpperCase()
+  const header = createHeader(options)
+
   return new Promise((resolve, reject) => {
     wx.request({
-      url: normalizeUrl(options.url),
+      url: normalizeUrl(options.url, baseUrl),
       method,
       data: options.data || {},
       header,
       timeout: options.timeout || config.requestTimeout,
       responseType: options.responseType || 'text',
       success(res) {
-        const statusCode = res.statusCode
-        if (statusCode >= 200 && statusCode < 300) {
-          const body = res.data || {}
-          if (typeof body === 'object' && body !== null && Object.prototype.hasOwnProperty.call(body, 'code')) {
-            if (body.code === 200) {
-              resolve(body)
-              return
-            }
-            reject({
-              statusCode,
-              data: body,
-              message: body.message || 'request failed',
-            })
-            return
-          }
-          resolve(body)
+        const normalized = normalizeResponse(res.statusCode, res.data, 'request failed')
+        if (normalized.ok) {
+          setActiveBaseUrl(baseUrl)
+          resolve(normalized.data)
           return
         }
-
-        if (statusCode === 401) {
-          const app = getApp()
-          if (app && app.clearAuth) {
-            app.clearAuth()
-          }
-        }
-
-        reject({
-          statusCode,
-          data: res.data,
-          message: (res.data && res.data.message) || 'request failed',
-        })
+        reject(normalized.error)
       },
       fail(err) {
         reject({
@@ -76,16 +195,35 @@ function request(options) {
   })
 }
 
-function uploadFile(options) {
-  const token = wx.getStorageSync('token') || ''
-  const header = Object.assign({}, options.header || {})
-  if (token) {
-    header.Authorization = 'Bearer ' + token
+async function request(options) {
+  const candidates = getBaseUrlCandidates()
+  let lastError = null
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const baseUrl = candidates[index]
+
+    try {
+      return await performRequest(baseUrl, options)
+    } catch (err) {
+      lastError = err
+      if (index === candidates.length - 1 || !shouldRetry(err)) {
+        throw err
+      }
+    }
   }
+
+  throw lastError || { statusCode: 0, message: 'network error' }
+}
+
+function performUpload(baseUrl, options) {
+  const header = createHeader(Object.assign({}, options, {
+    method: 'UPLOAD',
+    skipJsonContentType: true,
+  }))
 
   return new Promise((resolve, reject) => {
     wx.uploadFile({
-      url: normalizeUrl(options.url),
+      url: normalizeUrl(options.url, baseUrl),
       filePath: options.filePath,
       name: options.name || 'file',
       formData: options.formData || {},
@@ -96,31 +234,16 @@ function uploadFile(options) {
         try {
           parsed = JSON.parse(res.data)
         } catch (e) {
-          // keep raw text if backend does not return JSON
+          // Keep raw text if backend does not return JSON.
         }
 
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          if (typeof parsed === 'object' && parsed !== null && Object.prototype.hasOwnProperty.call(parsed, 'code')) {
-            if (parsed.code === 200) {
-              resolve(parsed)
-              return
-            }
-            reject({
-              statusCode: res.statusCode,
-              data: parsed,
-              message: parsed.message || 'upload failed',
-            })
-            return
-          }
-          resolve(parsed)
+        const normalized = normalizeResponse(res.statusCode, parsed, 'upload failed')
+        if (normalized.ok) {
+          setActiveBaseUrl(baseUrl)
+          resolve(normalized.data)
           return
         }
-
-        reject({
-          statusCode: res.statusCode,
-          data: parsed,
-          message: (parsed && parsed.message) || 'upload failed',
-        })
+        reject(normalized.error)
       },
       fail(err) {
         reject({
@@ -132,7 +255,285 @@ function uploadFile(options) {
   })
 }
 
+async function uploadFile(options) {
+  const candidates = getBaseUrlCandidates()
+  let lastError = null
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const baseUrl = candidates[index]
+
+    try {
+      return await performUpload(baseUrl, options)
+    } catch (err) {
+      lastError = err
+      if (index === candidates.length - 1 || !shouldRetry(err)) {
+        throw err
+      }
+    }
+  }
+
+  throw lastError || { statusCode: 0, message: 'upload error' }
+}
+
+function arrayBufferToText(buffer) {
+  if (typeof TextDecoder !== 'undefined') {
+    return new TextDecoder('utf-8').decode(buffer)
+  }
+
+  const bytes = new Uint8Array(buffer)
+  let result = ''
+  const chunkSize = 0x8000
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize)
+    result += String.fromCharCode.apply(null, chunk)
+  }
+
+  try {
+    return decodeURIComponent(escape(result))
+  } catch (err) {
+    return result
+  }
+}
+
+function parseSseBlock(block) {
+  const lines = String(block || '').split('\n')
+  let eventName = ''
+  let dataText = ''
+
+  lines.forEach((line) => {
+    if (line.indexOf('event:') === 0) {
+      eventName = line.slice(6).trim()
+      return
+    }
+
+    if (line.indexOf('data:') === 0) {
+      dataText += line.slice(5).trim()
+    }
+  })
+
+  if (!dataText) {
+    return null
+  }
+
+  let payload = dataText
+  try {
+    payload = JSON.parse(dataText)
+  } catch (err) {
+    // Keep plain text when backend does not return JSON.
+  }
+
+  return {
+    eventName,
+    payload,
+  }
+}
+
+function extractAiReply(payload) {
+  if (!payload) {
+    return '暂未获取到回复，请稍后重试。'
+  }
+
+  if (typeof payload === 'string') {
+    return payload
+  }
+
+  const result = payload.result || {}
+  const reply = result.aiResponse
+    || payload.aiResponseContent
+    || payload.reply
+    || payload.content
+    || payload.answer
+    || result.result
+    || payload.message
+
+  if (reply) {
+    return reply
+  }
+
+  if (Array.isArray(result.resultData) && result.resultData.length) {
+    return JSON.stringify(result.resultData, null, 2)
+  }
+
+  return '请求已完成，但未收到可展示的 AI 文本结果。'
+}
+
+function shouldRetryAiRequest(err) {
+  if (!err) {
+    return false
+  }
+
+  if (err.statusCode === 0) {
+    return true
+  }
+
+  const message = String(err.message || '').toLowerCase()
+  return message.indexOf('timeout') !== -1
+    || message.indexOf('network') !== -1
+    || message.indexOf('fail') !== -1
+    || message.indexOf('refused') !== -1
+}
+
+function doAiChatRequest(baseUrl, data) {
+  const token = wx.getStorageSync('token') || ''
+  const header = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  }
+
+  if (token) {
+    header.Authorization = 'Bearer ' + token
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let requestTask = null
+    let buffer = ''
+
+    const finish = (handler, value) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      handler(value)
+    }
+
+    const fail = (error) => {
+      const message = String((error && error.message) || '').toLowerCase()
+      if (message.indexOf('token') !== -1 || message.indexOf('令牌') !== -1) {
+        clearAuth()
+      }
+
+      finish(reject, error)
+    }
+
+    const handleEvent = (event) => {
+      if (!event) {
+        return
+      }
+
+      const payload = event.payload
+      const errorMessage = typeof payload === 'object' && payload !== null
+        ? payload.error || payload.message
+        : ''
+
+      if (event.eventName === 'error' || errorMessage) {
+        fail({
+          statusCode: 0,
+          data: payload,
+          message: errorMessage || 'AI service failed',
+        })
+        return
+      }
+
+      if (event.eventName === 'complete' || (payload && payload.eventType === 'complete')) {
+        finish(resolve, {
+          code: 200,
+          message: 'success',
+          data: {
+            reply: extractAiReply(payload),
+            modifiedExcelUrl: (payload.result && payload.result.modifiedExcelUrl) || payload.modifiedExcelUrl || '',
+            resultData: (payload.result && payload.result.resultData) || payload.resultData || [],
+            raw: payload,
+          },
+        })
+      }
+    }
+
+    const consumeText = (text) => {
+      buffer += String(text || '').replace(/\r\n/g, '\n')
+
+      let separatorIndex = buffer.indexOf('\n\n')
+      while (separatorIndex !== -1) {
+        const block = buffer.slice(0, separatorIndex).trim()
+        buffer = buffer.slice(separatorIndex + 2)
+
+        if (block) {
+          handleEvent(parseSseBlock(block))
+        }
+
+        separatorIndex = buffer.indexOf('\n\n')
+      }
+    }
+
+    requestTask = wx.request({
+      url: normalizeUrl('/ai/chat/stream', baseUrl),
+      method: 'POST',
+      data: {
+        fileId: data.documentId || data.fileId || null,
+        userInput: data.message || data.userInput || '',
+      },
+      header,
+      timeout: config.aiRequestTimeout,
+      responseType: 'arraybuffer',
+      enableChunked: true,
+      success(res) {
+        if (settled) {
+          return
+        }
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          finish(reject, {
+            statusCode: res.statusCode,
+            data: res.data,
+            message: 'AI request failed',
+          })
+          return
+        }
+
+        if (res.data) {
+          if (typeof res.data === 'string') {
+            consumeText(res.data)
+          } else {
+            consumeText(arrayBufferToText(res.data))
+          }
+        }
+
+        if (!settled) {
+          finish(reject, {
+            statusCode: 0,
+            message: 'No complete AI response was received.',
+          })
+        }
+      },
+      fail(err) {
+        if (settled) {
+          return
+        }
+
+        finish(reject, {
+          statusCode: 0,
+          message: (err && err.errMsg) || 'AI request failed',
+        })
+      },
+    })
+
+    if (requestTask && typeof requestTask.onChunkReceived === 'function') {
+      requestTask.onChunkReceived((res) => {
+        if (settled || !res || !res.data) {
+          return
+        }
+
+        try {
+          consumeText(arrayBufferToText(res.data))
+        } catch (err) {
+          fail({
+            statusCode: 0,
+            message: err.message || 'AI response parse failed',
+          })
+        }
+      })
+    }
+  })
+}
+
 module.exports = {
   request,
   uploadFile,
+  getBaseUrl,
+  getBaseUrlCandidates,
+  normalizeUrl,
+  clearAuth,
+  doAiChatRequest,
+  getConfiguredBaseUrls,
 }

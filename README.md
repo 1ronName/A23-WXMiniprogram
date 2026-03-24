@@ -1,192 +1,162 @@
-# WeChat Mini Program (DocAI Adaptation)
+# A23-WXMiniprogram
 
-本目录已从微信官方 Demo 改造为 DocAI 业务小程序版本，并已对齐当前本地可运行的 Spring Boot 后端。
+本小程序已改为直接对接 `DocAI` 文档中的后端接口，所有业务请求统一走 `DocAI /api/v1`。
 
-## 当前功能
+当前已对齐的核心能力：
+- 登录 / 注册：`POST /api/v1/users/auth`
+- 当前用户：`GET /api/v1/users/info`
+- 源文档上传、列表、删除：`/api/v1/source/*`
+- 智能填表：`/api/v1/template/*`
+- AI 对话：`POST /api/v1/ai/chat/stream`
+- 对话会话与消息同步：`/api/v1/ai/conversations/*`
 
-- 登录 / 注册
-- 工作台统计
-- 文档管理：查询、上传、删除、预览、关联到 AI 对话
-- 智能填表：预览模式
-- AI 对话：支持关联文档
-- AI 写作：生成 + 润色
+注意
+- 小程序 AI 对话页面结构未改，只替换为 DocAI 后端接口。
+- 小程序上传的源文档格式按 DocAI 后端能力收敛为：`.docx`、`.xlsx`、`.md`、`.txt`
 
-## 页面结构
+## 启动方式
 
-主要页面位于 `miniprogram/pages/docai/`
+### 方法一：本地联调
 
-- `login`：登录注册
-- `dashboard`：工作台
-- `documents`：文档管理
-- `autofill`：智能填表（预览）
-- `chat`：AI 对话
+进入 `DocAI` 后端目录：
 
-## 当前联调配置
+```powershell
+cd E:\A23服创赛\DocAI\docai-pro
+```
 
-文件：[miniprogram/config.js](/e:/A23服创赛/A23-WXMiniprogram/miniprogram/config.js#L22)
+按需先配置大模型 Key：
 
-- `apiBaseUrl`：`http://127.0.0.1:8082/api`
-- `requestTimeout`：`120000`
+```powershell
+$env:DOC_DASHSCOPE_API_KEY="你的 DashScope API Key"
+```
+
+如果本机是 JDK 17 / 21，直接启动：
+
+```powershell
+.\start-lite-windows.ps1
+```
+
+`start-lite-windows.ps1` 现已兼容当前这台已验证的 JDK 24 环境。脚本会自动补齐 Lombok 注解处理器参数并切换到兼容的 Maven 编译参数，所以“方法一”仍然直接执行同一条命令即可；下面那组长命令保留为手动排查参考。若本机没有把 `javac` 加入 `PATH`，请先将 `JAVA_HOME` 指向一个可用的 JDK。
+
+若你需要单独手动排查 JDK 24 环境下的 Lombok 编译问题，可参考下面这组命令：
+
+```powershell
+$env:JDK_JAVAC_OPTIONS='-processorpath C:\Users\ALGH\.m2\repository\org\projectlombok\lombok\1.18.42\lombok-1.18.42.jar -processor lombok.launch.AnnotationProcessorHider$AnnotationProcessor'
+mvn '-Dlombok.version=1.18.42' '-Dmaven.compiler.forceJavacCompilerUse=true' '-Dmaven.compiler.fork=true' -DskipTests clean package
+docker compose -f .\deploy\docker-compose-mid-windows.yml up -d
+.\start-services-only.ps1
+```
+
+启动完成后，默认联调地址为：
+- `http://127.0.0.1:8080/api/v1`
+- 若只启动了网关服务，小程序会自动回退到 `http://127.0.0.1:18080/api/v1`
+
+本仓库已实测以下端口可正常监听：`3306`、`6379`、`8848`、`9001`、`9002`、`9003`、`18080`、`8080`
+
+### 方法二：使用 `http://docai.sa1.tunnelfrp.com` 作为公网入口
+
+此方法只改小程序侧配置，不改 `DocAI` 内容；并且默认不开启，不会影响方法一的本地运行。
+
+已在小程序配置中预留公网入口：
+
+- `remoteApiBaseUrl: 'http://docai.sa1.tunnelfrp.com/api/v1'`
+- `useRemoteApiBaseUrl: false`
+
+切换步骤：
+
+1. 打开 `miniprogram/config.js`
+2. 将 `useRemoteApiBaseUrl` 从 `false` 改为 `true`
+3. 重新编译微信开发者工具项目
+4. 如需切回本地联调，再改回 `false`
+
+对应代码如下：
+
+```js
+const REMOTE_API_BASE_URL = 'http://docai.sa1.tunnelfrp.com/api/v1'
+const useRemoteApiBaseUrl = true
+```
 
 说明：
 
-- 这里的 `8082` 是当前本地后端默认端口。
-- 这个地址只适用于微信开发者工具在本机联调。
-- 真机不能直接访问 `127.0.0.1`，需要改成电脑局域网 IP 或公网 HTTPS 域名。
+- 该域名页面入口已可访问，并已作为小程序侧的“方法二”配置项写入。
+- 当前默认仍走本地 `127.0.0.1`，所以不会影响现有本地运行。
+- 小程序启动时会自动按当前配置覆盖旧的接口缓存地址，方法一与方法二切换时不需要手动清理 `storage`
+- 已实测该公网入口可完成：`/users/auth`、`/users/info`、`/ai/conversations`、`/source/upload`、`/ai/chat/stream`
+- 若该公网地址后续出现 `502 Bad Gateway`、`请求格式错误`、登录失败或上传失败，请直接切回方法一。
+- 由于当前给定地址是 `http` 而不是 `https`，更适合开发者工具内联调；若要用于真机，仍建议准备可用的 `HTTPS` 合法域名。
 
-## 本地启动步骤
+### 3. 导入微信开发者工具
 
-### 1. 启动后端
+在微信开发者工具中导入项目：
 
-后端项目路径：
+- 项目目录：`E:\A23服创赛\A23-WXMiniprogram`
+- 小程序根目录：`miniprogram`
 
-- `cd A23服创赛\Intelligent-Document-Processing-System-former\docai\docai`
+### 4. 编译运行
 
-启动命令：
+编译后按下面顺序验证：
 
-```powershell
-//根据自己的路径运行相应文件
+1. 在登录页注册一个 DocAI 新账号
+2. 进入文档中心上传源文档
+3. 等待文档解析完成后进入智能填表
+4. 在 AI 对话页直接提问，或先从文档中心关联文档再提问
 
-' cd E:\A23服创赛\Intelligent-Document-Processing-System-former\docai\docai
-mvn spring-boot:run '
+## 默认配置
+
+小程序接口配置文件：
+
+- `miniprogram/config.js`
+
+默认内容：
+
+```js
+const LOCAL_API_BASE_URL = 'http://127.0.0.1:8080/api/v1'
+const LOCAL_API_FALLBACK_URLS = ['http://127.0.0.1:18080/api/v1']
+const REMOTE_API_BASE_URL = 'http://docai.sa1.tunnelfrp.com/api/v1'
+const useRemoteApiBaseUrl = false
 ```
 
-当前本地模式说明：
+## 已完成的后端对齐
 
-- 后端默认端口为 `8082`
-- 后端默认使用本地 H2 文件数据库，不再依赖 MySQL
-- 本地数据库文件默认位于：
-  `E:\A23服创赛\Intelligent-Document-Processing-System-former\docai\docai\data\docai`
+### 用户认证
 
-启动后可快速验证：
+- 登录和注册统一改为 `POST /api/v1/users/auth`
+- 当前用户改为 `GET /api/v1/users/info`
+- 退出登录改为 `POST /api/v1/users/logout`
 
-```text
-http://127.0.0.1:8082/api/auth/me
-```
+### 源文档
 
-未登录时返回：
+- 文档列表改为 `GET /api/v1/source/documents`
+- 文档上传改为 `POST /api/v1/source/upload`
+- 单个删除改为 `DELETE /api/v1/source/{docId}`
+- 批量删除改为 `POST /api/v1/source/batch-delete`
 
-```json
-{"code":500,"message":"未登录","data":null}
-```
+### 智能填表
 
-这表示后端 Web 服务已经正常启动。
+- 模板上传改为 `POST /api/v1/template/upload`
+- 模板解析改为 `POST /api/v1/template/{templateId}/parse`
+- 模板填充改为 `POST /api/v1/template/{templateId}/fill`
+- 小程序现在只会使用“已解析完成”的来源文档参与填表
 
-### 2. 打开小程序工程
+### AI 对话
 
-使用微信开发者工具导入：
+- 对齐到 `POST /api/v1/ai/chat/stream`
+- 小程序侧增加了对 SSE 返回内容的解析，保持原有 AI 对话界面不变
+- 历史会话、当前会话消息、关联文档信息改为走 `chat_conversations / chat_messages` 对应的后端接口
+- 因此同账号在 Web 端创建的会话和消息，小程序重新进入后可以读取
 
-- `E:\A23服创赛\A23-WXMiniprogram`
+## 真机调试说明
 
-小程序根目录为：
+真机不能直接访问 `127.0.0.1`。如需真机联调，请把 `miniprogram/config.js` 中的地址改成：
 
-- `miniprogram`
+- 局域网地址，例如：`http://192.168.x.x:8080/api/v1`
+- 或公网 HTTPS 地址，例如：`https://your-domain/api/v1`
 
-### 3. 编译运行
+如果使用 `DocAI/docs/项目启动说明书.md` 里的 Ngrok 方案，也可以直接填写对应的 HTTPS 域名。
 
-- 在微信开发者工具中点击“编译”
-- 首次进入建议直接注册一个新账号
-- 当前本地联调流程中，注册成功后会直接写入 token 并进入系统
+## 当前联调建议
 
-### 4. 验证主链路
-
-当前已验证通过的本地链路：
-
-1. 注册账号
-2. 获取 token
-3. 请求 `/api/documents/stats`
-4. 上传文档到 `/api/documents/upload`
-5. 再次查询文档列表与统计
-
-## 连接说明
-
-### 开发者工具本机联调
-
-默认配置就是本机联调：
-
-```text
-http://127.0.0.1:8082/api
-```
-
-适用场景：
-
-- 后端和微信开发者工具都运行在同一台电脑
-- 只做本地开发和调试
-
-### 真机调试
-
-真机调试时不能使用 `127.0.0.1`。
-
-你需要把 [miniprogram/config.js](/e:/A23服创赛/A23-WXMiniprogram/miniprogram/config.js#L22) 中的 `apiBaseUrl` 改成：
-
-- 局域网 IP，例如 `http://192.168.x.x:8082/api`
-- 或公网 HTTPS 域名，例如 `https://your-domain/api`
-
-同时注意：
-
-- 手机和电脑需要在同一网络下，若使用局域网 IP
-- Windows 防火墙需要允许 `8082` 端口访问
-- 若使用公网或正式环境，小程序后台必须配置“request 合法域名”
-
-### 端口变更
-
-如果 `8082` 被占用，可以通过环境变量修改后端端口，例如：
-
-```powershell
-$env:DOCAI_SERVER_PORT="8090"
-mvn spring-boot:run
-```
-
-修改后，小程序里的 `apiBaseUrl` 也要同步改成对应端口。
-
-### 数据库说明
-
-当前本地默认使用 H2 文件数据库，因此：
-
-- 不需要单独安装 MySQL 也可以启动
-- 注册的新账号只保存在本地 H2 中
-- 删除 `data` 目录后，本地账号和文档记录会丢失
-
-如果你们后续要切回 MySQL，可通过环境变量覆盖：
-
-```powershell
-$env:DOCAI_DB_URL="jdbc:mysql://127.0.0.1:3306/docai?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true"
-$env:DOCAI_DB_USERNAME="root"
-$env:DOCAI_DB_PASSWORD="你的密码"
-mvn spring-boot:run
-```
-
-## 当前接口对接情况
-
-小程序当前对接的是这组后端接口：
-
-- `POST /api/auth/login`
-- `POST /api/auth/register`
-- `GET /api/auth/me`
-- `GET /api/documents`
-- `POST /api/documents/upload`
-- `DELETE /api/documents/{id}`
-- `DELETE /api/documents/batch`
-- `GET /api/documents/stats`
-- `POST /api/ai/chat`
-- `POST /api/autofill/preview`
-
-## 当前使用建议
-
-- 本地首次进入建议直接注册新账号，不要再使用旧文档里提到的 `aaa / aaaaaa`
-- 文档上传、列表、统计这几条链路已经过本地验证
-- 智能填表当前走的是预览接口，返回 JSON 统计信息，不直接下载结果文件
-
-## 已知限制
-
-- 小程序端当前“智能填表”使用的是 `/api/autofill/preview`
-- 后端 `autofill/single` 返回的是二进制文件流，小程序端当前没有直接下载成品文件的完整适配
-- AI 对话、文档解析等能力仍依赖外部智谱接口；如果本机网络无法访问外部 AI 服务，相关能力可能失败
-- 真机调试必须处理 IP、端口、防火墙、合法域名这几项连接问题
-
-## 相关代码
-
-- 路由与 Tab：[miniprogram/app.json](/e:/A23服创赛/A23-WXMiniprogram/miniprogram/app.json)
-- 请求封装：[miniprogram/utils/request.js](/e:/A23服创赛/A23-WXMiniprogram/miniprogram/utils/request.js)
-- API 适配层：[miniprogram/api/docai.js](/e:/A23服创赛/A23-WXMiniprogram/miniprogram/api/docai.js)
-- 登录页：[miniprogram/pages/docai/login/index.js](/e:/A23服创赛/A23-WXMiniprogram/miniprogram/pages/docai/login/index.js)
+- 先在文档中心上传资料，再到智能填表页面执行模板填充
+- 文档状态为“解析中”时，暂时不要用于智能填表
+- 若 AI 对话失败，先确认 DocAI 后端服务、网关和模型 Key 已正常启动
+- 已实测共享库中的 `users`、`source_documents`、`chat_conversations`、`chat_messages` 会被小程序和 Web 共用
