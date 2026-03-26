@@ -32,16 +32,11 @@
       <view class="section-head">
         <view>
           <view class="section-title">智能填表</view>
-<<<<<<< HEAD
-=======
-          <view class="section-subtitle">选择模板后直接调用 DocAI 模板解析与自动填充。</view>
->>>>>>> 981c564daeb8518ce29c9063ec6c73314528f0c8
         </view>
         <view class="pill">最近更新 {{lastUpdated}}</view>
       </view>
 
       <view class="hero-actions dashboard-fill-actions">
-<<<<<<< HEAD
         <button class="outline-btn inline-btn" bindtap="chooseTemplate">选择模板</button>
         <button
           class="outline-btn inline-btn dashboard-fill-outline"
@@ -49,10 +44,6 @@
           disabled="{{loading || !templatePath}}"
           bindtap="startFill"
         >{{loading ? '生成中...' : (templatePath ? '生成预览' : '先选模板')}}</button>
-=======
-        <button class="solid-btn inline-btn" bindtap="chooseTemplate">选择模板</button>
-        <button class="outline-btn inline-btn dashboard-fill-outline" loading="{{loading}}" bindtap="startFill">开始填充</button>
->>>>>>> 981c564daeb8518ce29c9063ec6c73314528f0c8
       </view>
 
       <view class="autofill-status-grid">
