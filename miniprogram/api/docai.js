@@ -1,6 +1,24 @@
-const { request, uploadFile } = require('../utils/request')
+const config = require('../config')
+const {
+  request,
+  uploadFile,
+  getBaseUrlCandidates,
+  normalizeUrl,
+  clearAuth,
+} = require('../utils/request')
 
-let lastTemplateFile = null
+function normalizeUser(item) {
+  if (!item) {
+    return item
+  }
+
+  return Object.assign({}, item, {
+    username: item.username || item.userName || '',
+    userName: item.userName || item.username || '',
+    nickname: item.nickname || item.userName || item.username || '',
+    email: item.email || '',
+  })
+}
 
 function normalizeDocument(item) {
   if (!item) {
@@ -8,70 +26,338 @@ function normalizeDocument(item) {
   }
 
   return Object.assign({}, item, {
+    id: item.id,
+    title: item.title || item.fileName || '',
     fileName: item.fileName || item.title || '',
+    fileType: String(item.fileType || '').toLowerCase(),
+    uploadStatus: item.uploadStatus || '',
     docSummary: item.docSummary || item.contentText || '',
   })
 }
 
-function wrapSuccess(data) {
-  return Promise.resolve({
+function buildSuccess(data, message) {
+  return {
     code: 200,
-    message: 'success',
+    message: message || 'success',
     data,
+  }
+}
+
+function buildDocumentStats(list) {
+  const documents = Array.isArray(list) ? list : []
+
+  return {
+    total: documents.length,
+    docx: documents.filter((item) => item.fileType === 'docx').length,
+    xlsx: documents.filter((item) => item.fileType === 'xlsx').length,
+    txt: documents.filter((item) => item.fileType === 'txt').length,
+    md: documents.filter((item) => item.fileType === 'md').length,
+  }
+}
+
+function arrayBufferToText(buffer) {
+  if (typeof TextDecoder !== 'undefined') {
+    return new TextDecoder('utf-8').decode(buffer)
+  }
+
+  const bytes = new Uint8Array(buffer)
+  let result = ''
+  const chunkSize = 0x8000
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize)
+    result += String.fromCharCode.apply(null, chunk)
+  }
+
+  try {
+    return decodeURIComponent(escape(result))
+  } catch (err) {
+    return result
+  }
+}
+
+function parseSseBlock(block) {
+  const lines = String(block || '').split('\n')
+  let eventName = ''
+  let dataText = ''
+
+  lines.forEach((line) => {
+    if (line.indexOf('event:') === 0) {
+      eventName = line.slice(6).trim()
+      return
+    }
+
+    if (line.indexOf('data:') === 0) {
+      dataText += line.slice(5).trim()
+    }
+  })
+
+  if (!dataText) {
+    return null
+  }
+
+  let payload = dataText
+  try {
+    payload = JSON.parse(dataText)
+  } catch (err) {
+    // keep plain text when backend does not return JSON
+  }
+
+  return {
+    eventName,
+    payload,
+  }
+}
+
+function extractAiReply(payload) {
+  if (!payload) {
+    return '暂未获取到回复，请稍后重试。'
+  }
+
+  if (typeof payload === 'string') {
+    return payload
+  }
+
+  const result = payload.result || {}
+  const reply = result.aiResponse
+    || payload.aiResponseContent
+    || payload.reply
+    || payload.content
+    || payload.answer
+    || result.result
+    || payload.message
+
+  if (reply) {
+    return reply
+  }
+
+  if (Array.isArray(result.resultData) && result.resultData.length) {
+    return JSON.stringify(result.resultData, null, 2)
+  }
+
+  return '请求已完成，但未收到可展示的 AI 文本结果。'
+}
+
+function shouldRetryAiRequest(err) {
+  if (!err) {
+    return false
+  }
+
+  if (err.statusCode === 0) {
+    return true
+  }
+
+  const message = String(err.message || '').toLowerCase()
+  return message.indexOf('timeout') !== -1
+    || message.indexOf('network') !== -1
+    || message.indexOf('fail') !== -1
+    || message.indexOf('refused') !== -1
+}
+
+function doAiChatRequest(baseUrl, data) {
+  const token = wx.getStorageSync('token') || ''
+  const header = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  }
+
+  if (token) {
+    header.Authorization = 'Bearer ' + token
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let requestTask = null
+    let buffer = ''
+
+    const finish = (handler, value) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      handler(value)
+    }
+
+    const fail = (error) => {
+      const message = String((error && error.message) || '').toLowerCase()
+      if (message.indexOf('令牌') !== -1 || message.indexOf('token') !== -1) {
+        clearAuth()
+      }
+
+      finish(reject, error)
+    }
+
+    const handleEvent = (event) => {
+      if (!event) {
+        return
+      }
+
+      const payload = event.payload
+      const errorMessage = typeof payload === 'object' && payload !== null
+        ? payload.error || payload.message
+        : ''
+
+      if (event.eventName === 'error' || errorMessage) {
+        fail({
+          statusCode: 0,
+          data: payload,
+          message: errorMessage || 'AI 服务处理失败',
+        })
+        return
+      }
+
+      if (event.eventName === 'complete' || (payload && payload.eventType === 'complete')) {
+        finish(resolve, buildSuccess({
+          reply: extractAiReply(payload),
+          modifiedExcelUrl: (payload.result && payload.result.modifiedExcelUrl) || payload.modifiedExcelUrl || '',
+          resultData: (payload.result && payload.result.resultData) || payload.resultData || [],
+          raw: payload,
+        }))
+      }
+    }
+
+    const consumeText = (text) => {
+      buffer += String(text || '').replace(/\r\n/g, '\n')
+
+      let separatorIndex = buffer.indexOf('\n\n')
+      while (separatorIndex !== -1) {
+        const block = buffer.slice(0, separatorIndex).trim()
+        buffer = buffer.slice(separatorIndex + 2)
+
+        if (block) {
+          handleEvent(parseSseBlock(block))
+        }
+
+        separatorIndex = buffer.indexOf('\n\n')
+      }
+    }
+
+    requestTask = wx.request({
+      url: normalizeUrl('/ai/chat/stream', baseUrl),
+      method: 'POST',
+      data: {
+        fileId: data.documentId || data.fileId || null,
+        userInput: data.message || data.userInput || '',
+      },
+      header,
+      timeout: config.aiRequestTimeout,
+      responseType: 'arraybuffer',
+      enableChunked: true,
+      success(res) {
+        if (settled) {
+          return
+        }
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          finish(reject, {
+            statusCode: res.statusCode,
+            data: res.data,
+            message: 'AI 请求失败',
+          })
+          return
+        }
+
+        if (res.data) {
+          if (typeof res.data === 'string') {
+            consumeText(res.data)
+          } else {
+            consumeText(arrayBufferToText(res.data))
+          }
+        }
+
+        if (!settled) {
+          finish(reject, {
+            statusCode: 0,
+            message: '未收到完整的 AI 响应，请稍后重试',
+          })
+        }
+      },
+      fail(err) {
+        if (settled) {
+          return
+        }
+
+        finish(reject, {
+          statusCode: 0,
+          message: (err && err.errMsg) || 'AI 请求失败',
+        })
+      },
+    })
+
+    if (requestTask && typeof requestTask.onChunkReceived === 'function') {
+      requestTask.onChunkReceived((res) => {
+        if (settled || !res || !res.data) {
+          return
+        }
+
+        try {
+          consumeText(arrayBufferToText(res.data))
+        } catch (err) {
+          fail({
+            statusCode: 0,
+            message: err.message || 'AI 响应解析失败',
+          })
+        }
+      })
+    }
   })
 }
 
 function authLogin(data) {
   return request({
-    url: '/auth/login',
+    url: '/users/auth',
     method: 'POST',
     data: {
       username: data.username,
       password: data.password,
+      isRegister: false,
     },
   }).then(function (res) {
-    var payload = res.data || {}
+    var payload = normalizeUser(res.data || {})
     return Object.assign({}, res, {
-      data: Object.assign({}, payload, {
-        userName: payload.userName || payload.username || '',
-        email: payload.email || '',
-      }),
+      data: payload,
     })
   })
 }
 
 function authRegister(data) {
   return request({
-    url: '/auth/register',
+    url: '/users/auth',
     method: 'POST',
     data: {
       username: data.username,
       password: data.password,
-      nickname: data.nickname || data.username,
+      isRegister: true,
     },
+  }).then(function (res) {
+    return Object.assign({}, res, {
+      data: normalizeUser(res.data || {}),
+    })
   })
 }
 
 function getCurrentUser() {
-  return request({ url: '/auth/me' })
+  return request({ url: '/users/info' }).then(function (res) {
+    return Object.assign({}, res, {
+      data: normalizeUser(res.data || {}),
+    })
+  })
 }
 
 function userLogout() {
-  return wrapSuccess(true)
+  return request({
+    url: '/users/logout',
+    method: 'POST',
+    data: {},
+  })
 }
 
 function getSourceDocuments() {
   return request({
-    url: '/documents',
-    data: {
-      page: 1,
-      size: 1000,
-    },
+    url: '/source/documents',
   }).then(function (res) {
-    var pageData = res.data || {}
-    var records = pageData.records || []
     return Object.assign({}, res, {
-      data: records.map(normalizeDocument),
+      data: (res.data || []).map(normalizeDocument),
     })
   })
 }
@@ -81,23 +367,32 @@ function getDocuments() {
 }
 
 function getDocument(id) {
-  return request({ url: '/documents/' + id }).then(function (res) {
+  return request({ url: '/source/' + id }).then(function (res) {
     return Object.assign({}, res, {
       data: normalizeDocument(res.data),
     })
   })
 }
 
+function getDocumentStatuses() {
+  return request({ url: '/source/documents/status' })
+}
+
+function getDocumentFields(id) {
+  return request({ url: '/source/' + id + '/fields' })
+}
+
 function getDocumentStats() {
-  return request({ url: '/documents/stats' })
+  return getSourceDocuments().then(function (res) {
+    return buildSuccess(buildDocumentStats(res.data || []))
+  })
 }
 
 function uploadDocument(filePath, fileName) {
   return uploadFile({
-    url: '/documents/upload',
+    url: '/source/upload',
     filePath: filePath,
     name: 'file',
-    formData: { fileName: fileName || '' },
   }).then(function (res) {
     if (res && res.data) {
       return Object.assign({}, res, {
@@ -109,82 +404,121 @@ function uploadDocument(filePath, fileName) {
 }
 
 function deleteDocument(id) {
-  return request({ url: '/documents/' + id, method: 'DELETE' })
+  return request({ url: '/source/' + id, method: 'DELETE' })
 }
 
 function batchDeleteDocuments(docIds) {
-  return request({ url: '/documents/batch', method: 'DELETE', data: docIds || [] })
+  return request({
+    url: '/source/batch-delete',
+    method: 'POST',
+    data: {
+      docIds: docIds || [],
+    },
+  })
 }
 
-function uploadTemplateFile(filePath, fileName) {
-  lastTemplateFile = {
-    id: 'local-template',
+function uploadTemplateFile(filePath) {
+  return uploadFile({
+    url: '/template/upload',
     filePath: filePath,
-    fileName: fileName,
-  }
-
-  return wrapSuccess({
-    id: lastTemplateFile.id,
-    fileName: fileName,
+    name: 'file',
+    timeout: config.aiRequestTimeout,
   })
 }
 
 function parseTemplateSlots(templateId) {
-  return wrapSuccess({
-    id: templateId,
-    parsed: true,
+  return request({
+    url: '/template/' + templateId + '/parse',
+    method: 'POST',
+    data: {},
+    timeout: config.aiRequestTimeout,
   })
 }
 
-function fillTemplate(templateId, docIds) {
-  if (!lastTemplateFile || !lastTemplateFile.filePath) {
-    return Promise.reject({ message: '请先选择模板文件' })
-  }
-
-  return uploadFile({
-    url: '/autofill/preview',
-    filePath: lastTemplateFile.filePath,
-    name: 'template',
-    formData: {
-      sourceDocIds: (docIds || []).join(','),
+function fillTemplate(templateId, docIds, userRequirement) {
+  return request({
+    url: '/template/' + templateId + '/fill',
+    method: 'POST',
+    data: {
+      docIds: docIds || [],
+      userRequirement: userRequirement || '',
     },
-    timeout: 300000,
-  }).then(function (res) {
-    var payload = (res && res.data) || {}
-    return Object.assign({}, res, {
-      data: {
-        filledCount: payload.sourceDocCount || 0,
-        blankCount: 0,
-        totalSlots: payload.sourceDocCount || 0,
-        templateName: payload.templateName || lastTemplateFile.fileName || '',
-        fillTimeMs: payload.fillTimeMs || 0,
-        fileSize: payload.fileSize || 0,
-      },
-    })
+    timeout: config.aiRequestTimeout,
   })
 }
 
 function listTemplateFiles() {
-  return wrapSuccess([])
+  return request({ url: '/template/list' })
 }
 
 function getTemplateAudit(templateId) {
-  return wrapSuccess({ templateId: templateId, supported: false })
+  return request({ url: '/template/' + templateId + '/audit' })
 }
 
 function getTemplateDecisions(templateId) {
-  return wrapSuccess({ templateId: templateId, supported: false })
+  return request({ url: '/template/' + templateId + '/decisions' })
 }
 
-function aiChat(data) {
+async function aiChat(data) {
+  const candidates = getBaseUrlCandidates()
+  let lastError = null
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const baseUrl = candidates[index]
+
+    try {
+      return await doAiChatRequest(baseUrl, data || {})
+    } catch (err) {
+      lastError = err
+      if (index === candidates.length - 1 || !shouldRetryAiRequest(err)) {
+        throw err
+      }
+    }
+  }
+
+  throw lastError || { statusCode: 0, message: 'AI 请求失败' }
+}
+
+function listConversations() {
   return request({
-    url: '/ai/chat',
+    url: '/ai/conversations',
+  })
+}
+
+function createConversation(data) {
+  return request({
+    url: '/ai/conversations',
     method: 'POST',
-    data: {
-      message: data.message || data.userInput || '',
-      documentId: data.documentId || data.fileId || null,
-    },
-    timeout: 300000,
+    data: data || {},
+  })
+}
+
+function updateConversation(id, data) {
+  return request({
+    url: '/ai/conversations/' + id,
+    method: 'PUT',
+    data: data || {},
+  })
+}
+
+function deleteConversationApi(id) {
+  return request({
+    url: '/ai/conversations/' + id,
+    method: 'DELETE',
+  })
+}
+
+function getConversationMessages(id) {
+  return request({
+    url: '/ai/conversations/' + id + '/messages',
+  })
+}
+
+function addConversationMessage(id, data) {
+  return request({
+    url: '/ai/conversations/' + id + '/messages',
+    method: 'POST',
+    data: data || {},
   })
 }
 
@@ -196,6 +530,8 @@ module.exports = {
   getSourceDocuments,
   getDocuments,
   getDocument,
+  getDocumentStatuses,
+  getDocumentFields,
   getDocumentStats,
   uploadDocument,
   deleteDocument,
@@ -207,4 +543,10 @@ module.exports = {
   getTemplateAudit,
   getTemplateDecisions,
   aiChat,
+  listConversations,
+  createConversation,
+  updateConversation,
+  deleteConversationApi,
+  getConversationMessages,
+  addConversationMessage,
 }

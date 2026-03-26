@@ -4,17 +4,17 @@ function getModeMeta(isLogin) {
   if (isLogin) {
     return {
       modeTitle: '欢迎回来',
-      modeDesc: '进入工作台，继续上传资料、发起问答或进行智能填表。',
+      modeDesc: '使用 DocAI 后端账号进入工作台，继续上传资料、发起问答或进行智能填表。',
       submitText: '进入工作台',
-      modeTip: '首次本地联调建议先注册一个测试账号。',
+      modeTip: '默认对接 DocAI `/api/v1` 接口，登录成功后会保存 JWT 令牌。',
     }
   }
 
   return {
-    modeTitle: '创建测试账号',
-    modeDesc: '注册后会直接写入本地环境，方便你继续做前后端联调。',
-    submitText: '创建并进入',
-    modeTip: '昵称选填，默认会使用用户名作为显示名称。',
+    modeTitle: '创建 DocAI 账号',
+    modeDesc: '注册会调用 DocAI 的统一认证接口，成功后自动登录并进入小程序。',
+    submitText: '注册并进入',
+    modeTip: '用户名和密码会提交到 `POST /api/v1/users/auth`，密码至少 6 位。',
   }
 }
 
@@ -24,7 +24,6 @@ Page({
       isLogin: true,
       loading: false,
       username: '',
-      nickname: '',
       password: '',
       confirmPassword: '',
     },
@@ -51,10 +50,6 @@ Page({
     this.setData({ username: e.detail.value.trim() })
   },
 
-  onNicknameInput(e) {
-    this.setData({ nickname: e.detail.value.trim() })
-  },
-
   onPasswordInput(e) {
     this.setData({ password: e.detail.value })
   },
@@ -74,6 +69,7 @@ Page({
       app.setAuth(token, {
         id: data.userId,
         username: data.userName || data.username || '',
+        nickname: data.nickname || data.userName || data.username || '',
         email: data.email || '',
       })
     }
@@ -118,22 +114,15 @@ Page({
         const res = await api.authRegister({
           username,
           password,
-          nickname: this.data.nickname,
         })
         const data = res.data || {}
 
-        if (this.applyAuth(data)) {
-          wx.showToast({ title: '注册成功', icon: 'success' })
-          wx.switchTab({ url: '/pages/docai/dashboard/index' })
-          return
+        if (!this.applyAuth(data)) {
+          throw new Error('注册成功，但未获取到登录令牌')
         }
 
-        wx.showToast({ title: '注册成功，请登录', icon: 'success' })
-        this.setData(Object.assign({
-          isLogin: true,
-          password: '',
-          confirmPassword: '',
-        }, getModeMeta(true)))
+        wx.showToast({ title: '注册成功', icon: 'success' })
+        wx.switchTab({ url: '/pages/docai/dashboard/index' })
       }
     } catch (err) {
       wx.showToast({
@@ -143,26 +132,5 @@ Page({
     } finally {
       this.setData({ loading: false })
     }
-  },
-
-  devQuickEnter() {
-    const app = getApp()
-    const token = 'dev-local-bypass-token'
-    const devUser = {
-      id: 'dev-local',
-      username: '开发者',
-      nickname: '开发者',
-      email: '',
-    }
-
-    if (app && app.setAuth) {
-      app.setAuth(token, devUser)
-    } else {
-      wx.setStorageSync('token', token)
-      wx.setStorageSync('user', devUser)
-    }
-
-    wx.showToast({ title: '已进入开发者模式', icon: 'none' })
-    wx.switchTab({ url: '/pages/docai/dashboard/index' })
   },
 })
