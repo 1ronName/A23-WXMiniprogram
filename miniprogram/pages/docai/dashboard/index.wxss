@@ -1,5 +1,70 @@
+page {
+  background: #f3f5f7;
+}
+
+.dashboard-page {
+  min-height: 100vh;
+  padding-left: 0;
+  padding-right: 0;
+  background: #f3f5f7;
+}
+
+.dashboard-page .panel {
+  border-radius: 28rpx;
+  border: none;
+  box-shadow: none;
+}
+
 .dashboard-grid {
   margin-top: 16rpx;
+}
+
+.dashboard-info-head {
+  align-items: center;
+}
+
+.dashboard-info-panel .dashboard-grid {
+  margin-top: 12rpx;
+  flex-wrap: nowrap;
+  gap: 8rpx;
+  justify-content: flex-start;
+}
+
+.dashboard-info-panel .dashboard-upload-btn {
+  min-width: 160rpx;
+}
+
+.dashboard-info-panel .dashboard-metric {
+  width: calc((100% - 24rpx) / 4);
+  min-height: 112rpx;
+  padding: 12rpx 10rpx;
+  border-radius: 14rpx;
+  border-color: #e5ebf5;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.dashboard-info-panel .dashboard-metric--primary,
+.dashboard-info-panel .dashboard-metric--cool,
+.dashboard-info-panel .dashboard-metric--warm,
+.dashboard-info-panel .dashboard-metric--plain {
+  background: #ffffff;
+}
+
+.dashboard-info-panel .metric-value {
+  font-size: 34rpx;
+  line-height: 1.15;
+  color: #1c54ea;
+}
+
+.dashboard-info-panel .metric-label {
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  line-height: 1.35;
+  color: #4f5c74;
 }
 
 .dashboard-metric {
@@ -7,19 +72,19 @@
 }
 
 .dashboard-metric--primary {
-  background: linear-gradient(180deg, #ffffff 0%, #edf2ff 100%);
+  background: #edf2ff;
 }
 
 .dashboard-metric--cool {
-  background: linear-gradient(180deg, #ffffff 0%, #eef8ff 100%);
+  background: #eef8ff;
 }
 
 .dashboard-metric--warm {
-  background: linear-gradient(180deg, #ffffff 0%, #fff5ea 100%);
+  background: #fff5ea;
 }
 
 .dashboard-metric--plain {
-  background: linear-gradient(180deg, #ffffff 0%, #f4f6fb 100%);
+  background: #f4f6fb;
 }
 
 .dashboard-fill-actions {
@@ -28,8 +93,12 @@
 
 .dashboard-fill-outline {
   color: #fff8ef;
-  border-color: rgba(255, 255, 255, 0.28);
+  border: 1rpx solid currentColor;
   background: rgba(255, 255, 255, 0.12);
+}
+
+.dashboard-fill-outline[disabled] {
+  opacity: 0.45;
 }
 
 .dashboard-fill-result {
@@ -50,7 +119,7 @@
 .autofill-status-card {
   padding: 20rpx;
   border-radius: 22rpx;
-  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+  background: #f6f9ff;
   border: 1rpx solid #e3eaf8;
 }
 

@@ -10,15 +10,15 @@
   "window": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "DocAI",
-    "navigationBarBackgroundColor": "#f8f3ea",
-    "backgroundColor": "#f7f0e4",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#ffffff",
     "backgroundTextStyle": "light"
   },
   "tabBar": {
     "color": "#6a7081",
     "selectedColor": "#1d57f2",
     "borderStyle": "black",
-    "backgroundColor": "#fffaf3",
+    "backgroundColor": "#ffffff",
     "list": [
       {
         "pagePath": "pages/docai/dashboard/index",

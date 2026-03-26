@@ -1,34 +1,29 @@
-<view class="doc-page">
+<view class="doc-page dashboard-page">
   <view class="page-shell">
-    <view class="panel rise-in">
-      <view class="section-head">
+    <view class="panel rise-in dashboard-info-panel">
+      <view class="section-head dashboard-info-head">
         <view>
-          <view class="section-title">核心数据</view>
-          <view class="section-subtitle">先确认资料规模，再执行填表或问答。</view>
+          <view class="section-title">文件信息</view>
         </view>
-        <button class="solid-btn inline-btn dashboard-upload-btn" bindtap="goDocuments">去上传文件</button>
+        <button class="outline-btn inline-btn dashboard-upload-btn" bindtap="goDocuments">去上传文件</button>
       </view>
 
       <view class="metric-grid dashboard-grid">
         <view class="metric-card dashboard-metric dashboard-metric--primary">
           <view class="metric-value">{{stats.total}}</view>
-          <view class="metric-label">文档总数</view>
-          <view class="metric-note">当前账号下全部资料</view>
+          <view class="metric-label">总文档数</view>
         </view>
         <view class="metric-card dashboard-metric dashboard-metric--cool">
-          <view class="metric-value">{{stats.docx + stats.xlsx}}</view>
-          <view class="metric-label">可填表资料</view>
-          <view class="metric-note">Word / Excel</view>
+          <view class="metric-value">{{stats.docx}}</view>
+          <view class="metric-label">Word 文档</view>
         </view>
         <view class="metric-card dashboard-metric dashboard-metric--warm">
-          <view class="metric-value">{{stats.txt + stats.md}}</view>
-          <view class="metric-label">文本资料</view>
-          <view class="metric-note">TXT / Markdown</view>
+          <view class="metric-value">{{stats.xlsx}}</view>
+          <view class="metric-label">Excel 表格</view>
         </view>
         <view class="metric-card dashboard-metric dashboard-metric--plain">
-          <view class="metric-value">{{sourceDocCount}}</view>
-          <view class="metric-label">来源文档</view>
-          <view class="metric-note">用于智能填表的数据池</view>
+          <view class="metric-value">{{stats.txt + stats.md}}</view>
+          <view class="metric-label">文本文件</view>
         </view>
       </view>
     </view>
@@ -37,14 +32,18 @@
       <view class="section-head">
         <view>
           <view class="section-title">智能填表</view>
-          <view class="section-subtitle">选择模板后直接生成预览。</view>
         </view>
         <view class="pill">最近更新 {{lastUpdated}}</view>
       </view>
 
       <view class="hero-actions dashboard-fill-actions">
-        <button class="solid-btn inline-btn" bindtap="chooseTemplate">选择模板</button>
-        <button class="outline-btn inline-btn dashboard-fill-outline" loading="{{loading}}" bindtap="startFill">开始预览</button>
+        <button class="outline-btn inline-btn" bindtap="chooseTemplate">选择模板</button>
+        <button
+          class="outline-btn inline-btn dashboard-fill-outline"
+          loading="{{loading}}"
+          disabled="{{loading || !templatePath}}"
+          bindtap="startFill"
+        >{{loading ? '生成中...' : (templatePath ? '生成预览' : '先选模板')}}</button>
       </view>
 
       <view class="autofill-status-grid">
