@@ -1,5 +1,9 @@
 const api = require('../../../api/docai')
 const { ensureLogin } = require('../../../utils/auth')
+const {
+  forgetDocumentName,
+  normalizeFileName,
+} = require('../../../utils/document-name')
 
 const FAVORITE_STORAGE_KEY = 'docai_document_favorites'
 const UPLOAD_EXTENSIONS = ['docx', 'xlsx', 'md', 'txt']
@@ -32,6 +36,16 @@ function getFallbackType(fileName) {
   return String(parts.pop() || '').toLowerCase()
 }
 
+function getSelectedFileName(file) {
+  const normalizedName = normalizeFileName(file && file.name)
+  if (normalizedName) {
+    return normalizedName
+  }
+
+  const filePath = String((file && (file.path || file.tempFilePath)) || '')
+  return normalizeFileName(filePath.split(/[\\/]/).pop())
+}
+
 function getUploadStatusText(status) {
   const normalizedStatus = String(status || '').toLowerCase()
 
@@ -54,6 +68,48 @@ function getUploadStatusText(status) {
   return status
 }
 
+function getUploadStatusTone(status) {
+  const normalizedStatus = String(status || '').toLowerCase()
+
+  if (normalizedStatus === 'parsed') {
+    return 'success'
+  }
+
+  if (normalizedStatus === 'parsing') {
+    return 'warning'
+  }
+
+  if (normalizedStatus === 'failed') {
+    return 'danger'
+  }
+
+  return 'plain'
+}
+
+function buildSlideButtons(itemId, isFavorite) {
+  const id = String(itemId)
+
+  return [
+    {
+      text: isFavorite ? '取消收藏' : '收藏',
+      extClass: 'document-swipe-btn document-swipe-btn--favorite',
+      data: {
+        action: 'favorite',
+        id,
+      },
+    },
+    {
+      type: 'warn',
+      text: '删除',
+      extClass: 'document-swipe-btn document-swipe-btn--delete',
+      data: {
+        action: 'delete',
+        id,
+      },
+    },
+  ]
+}
+
 Page({
   data: {
     loading: false,
@@ -67,6 +123,10 @@ Page({
     allDocuments: [],
     documents: [],
     isEmpty: true,
+    openSwipeId: '',
+    lastPickedFiles: [],
+    lastPickedCount: 0,
+    lastPickedMoreCount: 0,
   },
 
   async onShow() {
@@ -76,6 +136,22 @@ Page({
 
     this.loadUser()
     await this.loadDocuments()
+  },
+
+  async onPullDownRefresh() {
+    if (!ensureLogin()) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    this.loadUser()
+    const success = await this.loadDocuments({ silent: true })
+    wx.stopPullDownRefresh()
+
+    wx.showToast({
+      title: success ? '文档已刷新' : '刷新失败',
+      icon: success ? 'success' : 'none',
+    })
   },
 
   onPageScroll(e) {
@@ -158,15 +234,18 @@ Page({
     const title = item.fileName || item.title || '未命名文件'
     const fileType = String(item.fileType || getFallbackType(title)).toLowerCase()
     const typeMeta = this.getTypeMeta(fileType)
-    const modifiedAt = item.updatedAt || item.createdAt || ''
+    const uploadedAt = item.createdAt || item.updatedAt || ''
+    const sortTime = item.createdAt || item.updatedAt || ''
     const authorText = item.author || item.ownerName || item.userName || item.nickname || this.data.userName || '系统用户'
     const statusText = getUploadStatusText(item.uploadStatus)
     const previewText = String(item.docSummary || item.contentText || item.rawText || '')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 60)
+    const isFavorite = Boolean(favoriteMap[item.id])
 
     return Object.assign({}, item, {
+      idText: String(item.id),
       title,
       fileType,
       statusText,
@@ -175,10 +254,13 @@ Page({
       fileTypeLabel: typeMeta.label,
       fileSizeText: this.formatSize(Number(item.fileSize) || 0),
       authorText,
-      modifiedAtText: this.formatDate(modifiedAt),
-      modifiedAtValue: getTimeValue(modifiedAt),
+      uploadedAtText: this.formatDate(uploadedAt),
+      uploadedAtValue: getTimeValue(uploadedAt),
+      sortTimeValue: getTimeValue(sortTime),
       previewText,
-      isFavorite: Boolean(favoriteMap[item.id]),
+      statusTone: getUploadStatusTone(item.uploadStatus),
+      isFavorite,
+      slideButtons: buildSlideButtons(item.id, isFavorite),
       searchText: [
         title,
         authorText,
@@ -198,7 +280,7 @@ Page({
       return nextList.filter((item) => item.isFavorite)
     }
 
-    return nextList.sort((left, right) => right.modifiedAtValue - left.modifiedAtValue).slice(0, 20)
+    return nextList.sort((left, right) => right.sortTimeValue - left.sortTimeValue).slice(0, 20)
   },
 
   applyFilters() {
@@ -211,30 +293,45 @@ Page({
 
       return item.searchText.indexOf(keyword) !== -1
     })
+    const openSwipeId = documents.some((item) => item.idText === this.data.openSwipeId)
+      ? this.data.openSwipeId
+      : ''
 
     this.setData({
       documents,
       isEmpty: documents.length === 0,
+      openSwipeId,
     })
   },
 
-  async loadDocuments() {
-    this.setData({ loading: true })
+  async loadDocuments(options) {
+    const settings = Object.assign({
+      silent: false,
+    }, options || {})
+
+    this.setData({
+      loading: true,
+      openSwipeId: '',
+    })
 
     try {
       const favoriteMap = this.loadFavoriteMap()
       const res = await api.getSourceDocuments()
       const documents = (res.data || [])
         .map((item) => this.buildDocument(item, favoriteMap))
-        .sort((left, right) => right.modifiedAtValue - left.modifiedAtValue)
+        .sort((left, right) => right.sortTimeValue - left.sortTimeValue)
 
       this.setData({
         favoriteMap,
         allDocuments: documents,
       })
       this.applyFilters()
+      return true
     } catch (err) {
-      wx.showToast({ title: '文档加载失败', icon: 'none' })
+      if (!settings.silent) {
+        wx.showToast({ title: '文档加载失败', icon: 'none' })
+      }
+      return false
     } finally {
       this.setData({ loading: false })
     }
@@ -251,6 +348,7 @@ Page({
   clearKeyword() {
     this.setData({
       keyword: '',
+      openSwipeId: '',
     }, () => {
       this.applyFilters()
     })
@@ -258,7 +356,10 @@ Page({
 
   switchCategory(e) {
     const activeCategory = e.currentTarget.dataset.key || 'recent'
-    this.setData({ activeCategory }, () => {
+    this.setData({
+      activeCategory,
+      openSwipeId: '',
+    }, () => {
       this.applyFilters()
     })
   },
@@ -276,6 +377,18 @@ Page({
         return
       }
 
+      const pickedFiles = files.map((file) => ({
+        key: String(Math.random()).slice(2),
+        name: getSelectedFileName(file),
+        sizeText: this.formatSize(Number(file.size) || 0),
+      }))
+
+      this.setData({
+        lastPickedFiles: pickedFiles.slice(0, 6),
+        lastPickedCount: pickedFiles.length,
+        lastPickedMoreCount: Math.max(0, pickedFiles.length - 6),
+      })
+
       wx.showLoading({
         title: '正在上传',
         mask: true,
@@ -283,12 +396,12 @@ Page({
 
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index]
-        await api.uploadDocument(file.path, file.name)
+        await api.uploadDocument(file.path, getSelectedFileName(file))
       }
 
-      await this.loadDocuments()
+      const refreshed = await this.loadDocuments({ silent: true })
       wx.showToast({
-        title: '上传成功，后台正在解析',
+        title: refreshed ? '上传成功，后台正在解析' : '上传成功，下拉刷新可查看',
         icon: 'success',
       })
     } catch (err) {
@@ -354,7 +467,60 @@ Page({
   },
 
   previewDoc(e) {
-    this.previewDocumentItem(this.getDocumentFromEvent(e))
+    const item = this.getDocumentFromEvent(e)
+    if (!item) {
+      return
+    }
+
+    if (this.data.openSwipeId && item.idText === this.data.openSwipeId) {
+      this.setData({ openSwipeId: '' })
+      return
+    }
+
+    this.previewDocumentItem(item)
+  },
+
+  deleteDocumentFromEvent(e) {
+    this.deleteDocumentByItem(this.getDocumentFromEvent(e))
+  },
+
+  handleSwipeShow(e) {
+    const id = String(e.currentTarget.dataset.id || '')
+    if (!id || id === this.data.openSwipeId) {
+      return
+    }
+
+    this.setData({ openSwipeId: id })
+  },
+
+  handleSwipeHide(e) {
+    const id = String(e.currentTarget.dataset.id || '')
+    if (!id || this.data.openSwipeId !== id) {
+      return
+    }
+
+    this.setData({ openSwipeId: '' })
+  },
+
+  handleSwipeButtonTap(e) {
+    const detail = e.detail || {}
+    const data = detail.data || {}
+    const item = this.findDocumentById(data.id)
+
+    this.setData({ openSwipeId: '' })
+
+    if (!item) {
+      return
+    }
+
+    if (data.action === 'favorite') {
+      this.toggleFavoriteByItem(item)
+      return
+    }
+
+    if (data.action === 'delete') {
+      this.deleteDocumentByItem(item)
+    }
   },
 
   goChat() {
@@ -402,12 +568,14 @@ Page({
 
       return Object.assign({}, doc, {
         isFavorite: nextValue,
+        slideButtons: buildSlideButtons(docId, nextValue),
       })
     })
 
     this.setData({
       favoriteMap,
       allDocuments,
+      openSwipeId: '',
     }, () => {
       this.applyFilters()
     })
@@ -433,6 +601,7 @@ Page({
 
         try {
           await api.deleteDocument(item.id)
+          forgetDocumentName(item.id)
 
           const favoriteMap = Object.assign({}, this.data.favoriteMap)
           if (favoriteMap[item.id]) {
@@ -455,17 +624,9 @@ Page({
     })
   },
 
-  prepareShare() {
-    // empty handler for share button
-  },
-
-  onShareAppMessage(res) {
-    const item = res && res.from === 'button' && res.target
-      ? this.findDocumentById(res.target.dataset.id)
-      : null
-
+  onShareAppMessage() {
     return {
-      title: item ? '和你分享文档：' + item.title : '智能文档处理系统',
+      title: '智能文档处理系统',
       path: '/pages/docai/documents/index',
     }
   },
@@ -476,12 +637,11 @@ Page({
       return
     }
 
+    this.setData({ openSwipeId: '' })
+
     const actions = [
       '预览',
       'AI 对话',
-      item.isFavorite ? '取消收藏' : '收藏',
-      '分享',
-      '删除',
     ]
 
     wx.showActionSheet({
@@ -496,21 +656,6 @@ Page({
 
         if (action === 'AI 对话') {
           this.openChatWithItem(item)
-          return
-        }
-
-        if (action === '收藏' || action === '取消收藏') {
-          this.toggleFavoriteByItem(item)
-          return
-        }
-
-        if (action === '分享') {
-          wx.showToast({ title: '请点击文档卡片内分享入口', icon: 'none' })
-          return
-        }
-
-        if (action === '删除') {
-          this.deleteDocumentByItem(item)
         }
       },
     })

@@ -12,6 +12,50 @@ function normalizeBaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '')
 }
 
+function parseJsonSafely(data) {
+  if (typeof data !== 'string') {
+    return data
+  }
+
+  const text = data.trim()
+  if (!text) {
+    return data
+  }
+
+  try {
+    return JSON.parse(text)
+  } catch (err) {
+    return data
+  }
+}
+
+function isTokenMessage(message) {
+  const normalizedMessage = String(message || '').toLowerCase()
+  return normalizedMessage.indexOf('token') !== -1
+    || normalizedMessage.indexOf('\u4ee4\u724c') !== -1
+}
+
+function isAuthFailure(statusCode, data) {
+  if (statusCode === 401) {
+    return true
+  }
+
+  if (typeof data !== 'object' || data === null) {
+    return false
+  }
+
+  return data.code === 401
+    || (typeof data.code === 'number' && data.code >= 400 && isTokenMessage(data.message))
+}
+
+function looksLikeHtmlResponse(data) {
+  if (typeof data !== 'string') {
+    return false
+  }
+
+  return /<(?:!doctype|html|head|body|script|meta|title)\b/i.test(data)
+}
+
 function uniqueUrls(list) {
   const result = []
 
@@ -36,10 +80,10 @@ function getBaseUrlCandidates() {
   const cachedBaseUrl = wx.getStorageSync('docai_api_base_url') || ''
 
   return uniqueUrls([
-    globalData.apiBaseUrl,
-    config.apiBaseUrl,
     globalData.activeApiBaseUrl,
     cachedBaseUrl,
+    globalData.apiBaseUrl,
+    config.apiBaseUrl,
   ].concat(config.apiBaseFallbackUrls || []))
 }
 
@@ -112,12 +156,29 @@ function buildRequestError(statusCode, data, fallbackMessage) {
   }
 }
 
-function normalizeResponse(statusCode, data, fallbackMessage) {
-  if (typeof data === 'object' && data !== null && Object.prototype.hasOwnProperty.call(data, 'code')) {
-    if (data.code === 401) {
-      clearAuth()
-    }
+function buildUnexpectedApiResponseError(statusCode, data, baseUrl) {
+  return {
+    statusCode,
+    data,
+    baseUrl,
+    retryable: true,
+    message: looksLikeHtmlResponse(data)
+      ? '\u5f53\u524d\u540e\u7aef\u5730\u5740\u8fd4\u56de\u7684\u662f HTML \u9875\u9762\uff0c\u4e0d\u662f DocAI API\uff0c\u8bf7\u68c0\u67e5 API \u5165\u53e3'
+      : '\u5f53\u524d\u540e\u7aef\u5730\u5740\u672a\u8fd4\u56de DocAI JSON\uff0c\u8bf7\u68c0\u67e5 API \u5165\u53e3',
+  }
+}
 
+function normalizeResponse(statusCode, data, fallbackMessage, options) {
+  const normalizedOptions = Object.assign({
+    expectJson: false,
+    baseUrl: '',
+  }, options || {})
+
+  if (isAuthFailure(statusCode, data)) {
+    clearAuth()
+  }
+
+  if (typeof data === 'object' && data !== null && Object.prototype.hasOwnProperty.call(data, 'code')) {
     if (data.code === 200) {
       return {
         ok: true,
@@ -131,11 +192,14 @@ function normalizeResponse(statusCode, data, fallbackMessage) {
     }
   }
 
-  if (statusCode === 401) {
-    clearAuth()
-  }
-
   if (statusCode >= 200 && statusCode < 300) {
+    if (normalizedOptions.expectJson && typeof data === 'string') {
+      return {
+        ok: false,
+        error: buildUnexpectedApiResponseError(statusCode, data, normalizedOptions.baseUrl),
+      }
+    }
+
     return {
       ok: true,
       data,
@@ -151,6 +215,10 @@ function normalizeResponse(statusCode, data, fallbackMessage) {
 function shouldRetry(err) {
   if (!err) {
     return false
+  }
+
+  if (err.retryable) {
+    return true
   }
 
   if (err.statusCode === 0) {
@@ -177,7 +245,11 @@ function performRequest(baseUrl, options) {
       timeout: options.timeout || config.requestTimeout,
       responseType: options.responseType || 'text',
       success(res) {
-        const normalized = normalizeResponse(res.statusCode, res.data, 'request failed')
+        const responseData = parseJsonSafely(res.data)
+        const normalized = normalizeResponse(res.statusCode, responseData, 'request failed', {
+          expectJson: true,
+          baseUrl,
+        })
         if (normalized.ok) {
           setActiveBaseUrl(baseUrl)
           resolve(normalized.data)
@@ -230,14 +302,11 @@ function performUpload(baseUrl, options) {
       header,
       timeout: options.timeout || config.requestTimeout,
       success(res) {
-        let parsed = res.data
-        try {
-          parsed = JSON.parse(res.data)
-        } catch (e) {
-          // Keep raw text if backend does not return JSON.
-        }
-
-        const normalized = normalizeResponse(res.statusCode, parsed, 'upload failed')
+        const responseData = parseJsonSafely(res.data)
+        const normalized = normalizeResponse(res.statusCode, responseData, 'upload failed', {
+          expectJson: true,
+          baseUrl,
+        })
         if (normalized.ok) {
           setActiveBaseUrl(baseUrl)
           resolve(normalized.data)

@@ -1,0 +1,71 @@
+2026-03-27 11:58:16 0 [Note] Starting MariaDB 10.11.11-MariaDB source revision e69f8cae1a15e15b9e4f5e0f8497e1f17bdc81a4 server_uid ExDIlxWU16XheA07ZnGiFc+NQUk= as process 33232
+2026-03-27 11:58:16 0 [Note] InnoDB: Compressed tables use zlib 1.3.1
+2026-03-27 11:58:16 0 [Note] InnoDB: Number of transaction pools: 1
+2026-03-27 11:58:16 0 [Note] InnoDB: Using crc32 + pclmulqdq instructions
+2026-03-27 11:58:16 0 [Note] InnoDB: Initializing buffer pool, total size = 128.000MiB, chunk size = 2.000MiB
+2026-03-27 11:58:16 0 [Note] InnoDB: Completed initialization of buffer pool
+2026-03-27 11:58:16 0 [Note] InnoDB: File system buffers for log disabled (block size=512 bytes)
+2026-03-27 11:58:16 0 [Note] InnoDB: End of log at LSN=45502
+2026-03-27 11:58:16 0 [Note] InnoDB: 128 rollback segments are active.
+2026-03-27 11:58:16 0 [Note] InnoDB: Setting file './ibtmp1' size to 12.000MiB. Physically writing the file full; Please wait ...
+2026-03-27 11:58:16 0 [Note] InnoDB: File './ibtmp1' size is now 12.000MiB.
+2026-03-27 11:58:16 0 [Note] InnoDB: log sequence number 45502; transaction id 14
+2026-03-27 11:58:16 0 [Note] Plugin 'FEEDBACK' is disabled.
+2026-03-27 11:58:16 0 [Note] InnoDB: Loading buffer pool(s) from E:\A23服创赛\A23-WXMiniprogram\tools\mariadb-data\ib_buffer_pool
+2026-03-27 11:58:16 0 [Note] mariadbd.exe: SSPI: using principal name 'localhost', mech 'Negotiate'
+2026-03-27 11:58:16 0 [Note] InnoDB: Buffer pool(s) load completed at 260327 11:58:16
+2026-03-27 11:58:16 0 [Note] Server socket created on IP: '127.0.0.1'.
+2026-03-27 11:58:16 0 [Note] E:\A23服创赛\A23-WXMiniprogram\tools\mariadb-10.11.11-winx64\bin\mariadbd.exe: ready for connections.
+Version: '10.11.11-MariaDB'  socket: ''  port: 3306  mariadb.org binary distribution
+2026-03-27 12:01:14 7 [Warning] Aborted connection 7 to db: 'unconnected' user: 'unauthenticated' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:01:14 7 [Warning] Aborted connection 7 to db: 'unconnected' user: 'unauthenticated' host: 'localhost' (This connection closed normally without authentication)
+2026-03-27 12:15:05 25 [Warning] Aborted connection 25 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 23 [Warning] Aborted connection 23 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 20 [Warning] Aborted connection 20 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 27 [Warning] Aborted connection 27 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 22 [Warning] Aborted connection 22 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 19 [Warning] Aborted connection 19 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 26 [Warning] Aborted connection 26 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 18 [Warning] Aborted connection 18 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 21 [Warning] Aborted connection 21 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:05 24 [Warning] Aborted connection 24 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 12 [Warning] Aborted connection 12 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 10 [Warning] Aborted connection 10 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 11 [Warning] Aborted connection 11 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 8 [Warning] Aborted connection 8 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 9 [Warning] Aborted connection 9 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 13 [Warning] Aborted connection 13 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 14 [Warning] Aborted connection 14 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 15 [Warning] Aborted connection 15 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 16 [Warning] Aborted connection 16 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:15:30 17 [Warning] Aborted connection 17 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 41 [Warning] Aborted connection 41 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 47 [Warning] Aborted connection 47 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 50 [Warning] Aborted connection 50 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 43 [Warning] Aborted connection 43 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 49 [Warning] Aborted connection 49 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 46 [Warning] Aborted connection 46 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 45 [Warning] Aborted connection 45 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 44 [Warning] Aborted connection 44 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 48 [Warning] Aborted connection 48 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:16 42 [Warning] Aborted connection 42 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 31 [Warning] Aborted connection 31 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 39 [Warning] Aborted connection 39 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 40 [Warning] Aborted connection 40 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 34 [Warning] Aborted connection 34 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 37 [Warning] Aborted connection 37 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 33 [Warning] Aborted connection 33 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 36 [Warning] Aborted connection 36 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 32 [Warning] Aborted connection 32 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 35 [Warning] Aborted connection 35 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:20:41 38 [Warning] Aborted connection 38 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 79 [Warning] Aborted connection 79 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 93 [Warning] Aborted connection 93 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 76 [Warning] Aborted connection 76 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 77 [Warning] Aborted connection 77 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 75 [Warning] Aborted connection 75 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 87 [Warning] Aborted connection 87 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 83 [Warning] Aborted connection 83 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 78 [Warning] Aborted connection 78 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 90 [Warning] Aborted connection 90 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)
+2026-03-27 12:53:59 85 [Warning] Aborted connection 85 to db: 'docai' user: 'drw' host: 'localhost' (Got an error reading communication packets)

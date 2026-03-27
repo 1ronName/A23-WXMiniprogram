@@ -26,6 +26,7 @@ cd E:\A23服创赛\DocAI\docai-pro
 
 按需先配置大模型 Key：
 
+##可跳过
 ```powershell
 $env:DOC_DASHSCOPE_API_KEY="你的 DashScope API Key"
 ```

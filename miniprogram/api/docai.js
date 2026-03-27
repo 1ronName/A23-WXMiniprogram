@@ -6,6 +6,11 @@ const {
   normalizeUrl,
   clearAuth,
 } = require('../utils/request')
+const {
+  normalizeFileName,
+  rememberDocumentName,
+  resolveDocumentName,
+} = require('../utils/document-name')
 
 function normalizeUser(item) {
   if (!item) {
@@ -25,10 +30,12 @@ function normalizeDocument(item) {
     return item
   }
 
+  const displayFileName = resolveDocumentName(item)
+
   return Object.assign({}, item, {
     id: item.id,
-    title: item.title || item.fileName || '',
-    fileName: item.fileName || item.title || '',
+    title: displayFileName,
+    fileName: displayFileName,
     fileType: String(item.fileType || '').toLowerCase(),
     uploadStatus: item.uploadStatus || '',
     docSummary: item.docSummary || item.contentText || '',
@@ -389,11 +396,24 @@ function getDocumentStats() {
 }
 
 function uploadDocument(filePath, fileName) {
+  const normalizedFileName = normalizeFileName(fileName)
+
   return uploadFile({
     url: '/source/upload',
     filePath: filePath,
     name: 'file',
+    formData: normalizedFileName
+      ? {
+        fileName: normalizedFileName,
+        originalFileName: normalizedFileName,
+      }
+      : {},
   }).then(function (res) {
+    const payload = (res && res.data) || res || {}
+    if ((payload.id || payload.id === 0) && normalizedFileName) {
+      rememberDocumentName(payload.id, normalizedFileName)
+    }
+
     if (res && res.data) {
       return Object.assign({}, res, {
         data: normalizeDocument(res.data),

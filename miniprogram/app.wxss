@@ -347,6 +347,30 @@ button::after {
   animation: riseIn 0.45s ease both;
 }
 
+.document-swipe-btn {
+  min-width: 108rpx !important;
+}
+
+.document-swipe-btn .weui-slideview__btn {
+  height: 100%;
+  padding: 0 26rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.document-swipe-btn--favorite .weui-slideview__btn {
+  background: linear-gradient(180deg, #ffc04d 0%, #ffae17 100%);
+  color: #fffaf1;
+}
+
+.document-swipe-btn--delete .weui-slideview__btn {
+  background: linear-gradient(180deg, #ff626a 0%, #ff454f 100%);
+  color: #ffffff;
+}
+
 @keyframes riseIn {
   from {
     opacity: 0;

@@ -17,6 +17,7 @@
       <button wx:if="{{keyword}}" class="search-clear" bindtap="clearKeyword">清空</button>
     </view>
   </view>
+
   <view class="page-shell home-shell">
     <view class="panel rise-in document-user-panel">
       <view class="document-user-card">
@@ -71,8 +72,26 @@
             <view class="icon-tools-line icon-tools-line--h"></view>
             <view class="icon-tools-line icon-tools-line--v"></view>
           </view>
-          <view class="quick-title">更多工具</view>
+          <view class="quick-title">工作台</view>
         </button>
+      </view>
+    </view>
+
+    <view class="upload-picked-card rise-in" wx:if="{{lastPickedFiles.length}}">
+      <view class="upload-picked-head">
+        <view class="upload-picked-title">已选择文件</view>
+        <view class="upload-picked-count">{{lastPickedCount}} 份</view>
+      </view>
+
+      <view class="upload-picked-list">
+        <view class="upload-picked-item" wx:for="{{lastPickedFiles}}" wx:key="key">
+          <view class="upload-picked-name">{{item.name}}</view>
+          <view class="upload-picked-size">{{item.sizeText}}</view>
+        </view>
+      </view>
+
+      <view class="upload-picked-more" wx:if="{{lastPickedMoreCount}}">
+        另有 {{lastPickedMoreCount}} 份文件已选择
       </view>
     </view>
 
@@ -109,23 +128,63 @@
       </view>
 
       <view wx:else class="document-list">
-        <view
-          wx:for="{{documents}}"
-          wx:key="id"
-          class="document-row"
-          bindtap="previewDoc"
-          data-index="{{index}}"
-        >
-          <view class="document-file-icon document-file-icon--{{item.fileTheme}}">{{item.fileBadge}}</view>
+        <view wx:for="{{documents}}" wx:key="idText" class="document-slide-wrap">
+          <mp-slideview
+            class="document-slide-item"
+            data-id="{{item.idText}}"
+            buttons="{{item.slideButtons}}"
+            show="{{openSwipeId === item.idText}}"
+            bindshow="handleSwipeShow"
+            bindhide="handleSwipeHide"
+            bindbuttontap="handleSwipeButtonTap"
+          >
+            <view
+              class="document-row"
+              bindtap="previewDoc"
+              data-index="{{index}}"
+              data-id="{{item.idText}}"
+            >
+              <view class="document-file-icon document-file-icon--{{item.fileTheme}}">
+                <view class="document-file-sheet">
+                  <view class="document-file-corner"></view>
+                  <view wx:if="{{item.fileTheme === 'excel'}}" class="document-file-grid">
+                    <view class="document-file-grid-cell"></view>
+                    <view class="document-file-grid-cell"></view>
+                    <view class="document-file-grid-cell"></view>
+                    <view class="document-file-grid-cell"></view>
+                  </view>
+                  <view wx:elif="{{item.fileTheme === 'pdf'}}" class="document-file-pdf-mark">PDF</view>
+                  <view wx:else class="document-file-lines">
+                    <view class="document-file-line document-file-line--wide"></view>
+                    <view class="document-file-line"></view>
+                    <view class="document-file-line document-file-line--short"></view>
+                  </view>
+                </view>
+              </view>
 
-          <view class="document-info">
-            <view class="document-title-row">
-              <view class="document-title">{{item.title}}</view>
-              <button class="document-more" catchtap="openMoreActions" data-index="{{index}}">...</button>
+              <view class="document-info">
+                <view class="document-title-row">
+                  <view class="document-title">{{item.title}}</view>
+                  <button class="document-more" catchtap="openMoreActions" data-index="{{index}}">···</button>
+                </view>
+
+                <view class="document-meta-line">
+                  <view class="document-meta-text document-meta-text--author">{{item.authorText}}</view>
+                  <view class="document-meta-separator">|</view>
+                  <view class="document-meta-text">{{item.fileSizeText}}</view>
+                  <view class="document-meta-separator">|</view>
+                  <view class="document-meta-text">{{item.uploadedAtText}}</view>
+                </view>
+
+                <view class="document-extra-row" wx:if="{{item.statusTone !== 'success' || item.isFavorite}}">
+                  <view wx:if="{{item.statusTone !== 'success'}}" class="document-status document-status--{{item.statusTone}}">
+                    {{item.statusText}}
+                  </view>
+                  <view wx:if="{{item.isFavorite}}" class="document-favorite-flag">已收藏</view>
+                </view>
+              </view>
             </view>
-            <view class="document-author">{{item.authorText}}</view>
-            <view class="document-meta">{{item.fileSizeText}} · {{item.modifiedAtText}}</view>
-          </view>
+          </mp-slideview>
         </view>
       </view>
     </view>
