@@ -1,0 +1,12 @@
+<view wx:if="{{errorText}}" class="webview-page">
+  <view class="webview-card">
+    <view class="webview-title">网页智能填表暂不可用</view>
+    <text class="webview-desc">{{errorText}}</text>
+    <view class="webview-note">
+      当前小程序端已经补齐了网页入口，但 DocAI 站点本身还没有 mp_ticket / H5 会话兑换能力，所以网页模式不会自动继承小程序登录态。
+    </view>
+    <button class="webview-btn" bindtap="handleRetry">重新加载</button>
+  </view>
+</view>
+
+<web-view wx:else src="{{webviewUrl}}" binderror="handleWebError"></web-view>

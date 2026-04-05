@@ -1,18 +1,15 @@
 # A23-WXMiniprogram
 
-本小程序已改为直接对接 `DocAI` 文档中的后端接口，所有业务请求统一走 `DocAI /api/v1`。
+本小程序只对接 `DocAI` 现有后端，不改 `DocAI` 目录内容。当前已对齐的核心能力包括：
 
-当前已对齐的核心能力：
-- 登录 / 注册：`POST /api/v1/users/auth`
-- 当前用户：`GET /api/v1/users/info`
-- 源文档上传、列表、删除：`/api/v1/source/*`
+- 用户登录 / 注册：`POST /api/v1/users/auth`
+- 当前用户信息：`GET /api/v1/users/info`
+- 来源文档上传 / 列表 / 删除：`/api/v1/source/*`
 - 智能填表：`/api/v1/template/*`
 - AI 对话：`POST /api/v1/ai/chat/stream`
-- 对话会话与消息同步：`/api/v1/ai/conversations/*`
+- 会话与消息同步：`/api/v1/ai/conversations/*`
 
-注意
-- 小程序 AI 对话页面结构未改，只替换为 DocAI 后端接口。
-- 小程序上传的源文档格式按 DocAI 后端能力收敛为：`.docx`、`.xlsx`、`.md`、`.txt`
+AI 对话页原有界面结构保持不变。智能填表页在现有原生流程上补充了结果下载和可选网页模式入口。
 
 ## 启动方式
 
@@ -24,140 +21,187 @@
 cd E:\A23服创赛\DocAI\docai-pro
 ```
 
-按需先配置大模型 Key：
+按需配置 DashScope Key：
 
-##可跳过
 ```powershell
 $env:DOC_DASHSCOPE_API_KEY="你的 DashScope API Key"
 ```
 
-如果本机是 JDK 17 / 21，直接启动：
+如果本机是可用的 JDK 17 / 21 / 24 环境，直接启动：
 
 ```powershell
 .\start-lite-windows.ps1
 ```
 
-`start-lite-windows.ps1` 现已兼容当前这台已验证的 JDK 24 环境。脚本会自动补齐 Lombok 注解处理器参数并切换到兼容的 Maven 编译参数，所以“方法一”仍然直接执行同一条命令即可；下面那组长命令保留为手动排查参考。若本机没有把 `javac` 加入 `PATH`，请先将 `JAVA_HOME` 指向一个可用的 JDK。
+当前小程序本地联调接口约定如下：
 
-若你需要单独手动排查 JDK 24 环境下的 Lombok 编译问题，可参考下面这组命令：
+- 开发者工具：`http://127.0.0.1:8080/api/v1`
+- 开发者工具回退：`http://127.0.0.1:18080/api/v1`
+- 真机局域网地址：以 [config.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/config.js) 中 `REAL_DEVICE_API_BASE_URL` 为准
 
-```powershell
-$env:JDK_JAVAC_OPTIONS='-processorpath C:\Users\ALGH\.m2\repository\org\projectlombok\lombok\1.18.42\lombok-1.18.42.jar -processor lombok.launch.AnnotationProcessorHider$AnnotationProcessor'
-mvn '-Dlombok.version=1.18.42' '-Dmaven.compiler.forceJavacCompilerUse=true' '-Dmaven.compiler.fork=true' -DskipTests clean package
-docker compose -f .\deploy\docker-compose-mid-windows.yml up -d
-.\start-services-only.ps1
-```
-
-启动完成后，默认联调地址为：
-- `http://127.0.0.1:8080/api/v1`
-- 若只启动了网关服务，小程序会自动回退到 `http://127.0.0.1:18080/api/v1`
-
-本仓库已实测以下端口可正常监听：`3306`、`6379`、`8848`、`9001`、`9002`、`9003`、`18080`、`8080`
-
-### 方法二：使用 `http://docai.sa1.tunnelfrp.com` 作为公网入口
-
-此方法只改小程序侧配置，不改 `DocAI` 内容；并且默认不开启，不会影响方法一的本地运行。
-
-已在小程序配置中预留公网入口：
-
-- `remoteApiBaseUrl: 'http://docai.sa1.tunnelfrp.com/api/v1'`
-- `useRemoteApiBaseUrl: false`
-
-切换步骤：
-
-1. 打开 `miniprogram/config.js`
-2. 将 `useRemoteApiBaseUrl` 从 `false` 改为 `true`
-3. 重新编译微信开发者工具项目
-4. 如需切回本地联调，再改回 `false`
-
-对应代码如下：
+如果你要切回本地联调，请把 [config.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/config.js) 中的：
 
 ```js
-const REMOTE_API_BASE_URL = 'http://docai.sa1.tunnelfrp.com/api/v1'
 const useRemoteApiBaseUrl = true
 ```
 
-说明：
+改成：
 
-- 该域名页面入口已可访问，并已作为小程序侧的“方法二”配置项写入。
-- 当前默认仍走本地 `127.0.0.1`，所以不会影响现有本地运行。
-- 小程序启动时会自动按当前配置覆盖旧的接口缓存地址，方法一与方法二切换时不需要手动清理 `storage`
-- 已实测该公网入口可完成：`/users/auth`、`/users/info`、`/ai/conversations`、`/source/upload`、`/ai/chat/stream`
-- 若该公网地址后续出现 `502 Bad Gateway`、`请求格式错误`、登录失败或上传失败，请直接切回方法一。
-- 由于当前给定地址是 `http` 而不是 `https`，更适合开发者工具内联调；若要用于真机，仍建议准备可用的 `HTTPS` 合法域名。
+```js
+const useRemoteApiBaseUrl = false
+```
 
-### 3. 导入微信开发者工具
+### 方法二：使用 `https://docai.sa1.tunnelfrp.com`
 
-在微信开发者工具中导入项目：
+当前仓库已经预置公网接口与网页入口：
+
+```js
+const REMOTE_API_BASE_URL = 'https://docai.sa1.tunnelfrp.com/api/v1'
+const REMOTE_WEB_BASE_URL = 'https://docai.sa1.tunnelfrp.com'
+```
+
+小程序如果需要走公网站点：
+
+1. 保持 [config.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/config.js) 中 `useRemoteApiBaseUrl = true`
+2. 重新编译微信开发者工具项目
+3. 确认微信小程序后台已经配置了对应合法域名
+
+## 微信小程序后台域名配置
+
+短期继续使用隧道域名时，请把同一个主机名 `docai.sa1.tunnelfrp.com` 同时配置到：
+
+- `web-view` 业务域名：`https://docai.sa1.tunnelfrp.com`
+- `request` 合法域名：`https://docai.sa1.tunnelfrp.com`
+- `uploadFile` 合法域名：`https://docai.sa1.tunnelfrp.com`
+- `downloadFile` 合法域名：`https://docai.sa1.tunnelfrp.com`
+- `socket` 合法域名：仅当后续网站启用 `WSS` 时再配置 `wss://docai.sa1.tunnelfrp.com`
+
+注意事项：
+
+- 不能使用 IP 或 `localhost`
+- 不能只配父域名，必须配具体子域名
+- 配置项里不能写路径
+- 如果网页内再嵌套别的域名资源、`iframe`、上传域名或 `WSS` 域名，也要进入白名单
+- URL 参数尽量使用编码后的 ASCII 字符串，避免 iOS `web-view` 出现兼容问题
+
+## 智能填表现状
+
+### 原生模式
+
+当前默认推荐的智能填表路径已经简化为单页原生流程，主页面是 [autofill/index.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/pages/docai/autofill/index.js)。
+
+当前页直接完成这些动作：
+
+1. 选择或上传数据源文档
+2. 选择模板文件
+3. 输入填表需求
+4. 执行智能填表
+5. 在同页查看结果、下载和转发
+
+单页流程里固定按下面顺序调用 `DocAI` 现有接口，不新增任何后端 API：
+
+1. 校验当前草稿中的来源文档状态
+2. `POST /api/v1/template/upload`
+3. `POST /api/v1/template/{templateId}/parse`
+4. `POST /api/v1/template/{templateId}/fill`
+5. `GET /api/v1/template/{templateId}/download`
+
+数据源只允许：
+
+- `docx`
+- `xlsx`
+- `txt`
+- `md`
+
+模板只允许：
+
+- `docx`
+- `xlsx`
+
+单页结果区和文档页中的“成表”区域都支持：
+
+- 下载并直接打开
+- 仅下载到本地
+- 转发结果文件
+
+### 网页模式
+
+网页模式现在是“辅助入口”，不是主流程：
+
+- 入口页：[autofill/index.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/pages/docai/autofill/index.js)
+- `web-view` 容器页：[autofill-web/index.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/pages/docai/autofill-web/index.js)
+
+网页模式会通过 `web-view` 打开：
+
+```text
+https://docai.sa1.tunnelfrp.com/autofill?from=miniapp&scene=form&entry=wx-autofill
+```
+
+这条链路只改了小程序侧，没有改 `DocAI`。因此它能做到的是：
+
+- 从小程序中直接打开同域名网站版智能填表
+- 使用同一个 `docai.sa1.tunnelfrp.com` 作为网页入口
+- 把后台域名配置要求收敛到同一个主机名
+
+它当前还做不到的是：
+
+- 小程序登录态自动换成网页登录态
+- 通过 `mp_ticket` 自动进入 H5 表单
+- H5 调原生上传页后再实时回传 `file_id`
+
+原因不是小程序代码缺失，而是 `DocAI` 现有代码中没有这套支持：
+
+- `DocAI` Web 端当前仍使用浏览器 `localStorage token` 登录守卫
+- 未发现 `mp_ticket`
+- 未发现 `exchange-ticket`
+- 未发现 `jscode2Session / openid / session_key`
+- 未发现 `sendWebviewEvent / onWebviewEvent`
+
+对应参考位置：
+
+- [router/index.js](/E:/A23服创赛/DocAI/docai-frontend/src/router/index.js)
+- [Login.vue](/E:/A23服创赛/DocAI/docai-frontend/src/views/Login.vue)
+
+所以，网页模式目前是“可打开网站版智能填表”的补充路径，不是“已经完成无感单点登录”的最终态。首次进入时如果网页端还没有自己的登录态，可能会先跳到网站登录页。
+
+## 如果后续允许改 DocAI，建议再补的接口
+
+如果未来放开“禁止修改 DocAI”的限制，再继续做下面这套能力会更完整：
+
+1. `POST /miniapp/h5-ticket`
+2. `POST /h5/exchange-ticket`
+3. `GET /form/init`
+4. `POST /form/upload`
+5. `POST /form/submit`
+
+同时再补：
+
+- 小程序 `wx.login -> jscode2Session -> OpenID` 登录桥
+- H5 `wx.miniProgram.getEnv`
+- 原生上传页 + `wx.uploadFile`
+- `sendWebviewEvent / onWebviewEvent` 实时回传附件结果
+
+## 小程序导入与验证
+
+微信开发者工具导入：
 
 - 项目目录：`E:\A23服创赛\A23-WXMiniprogram`
 - 小程序根目录：`miniprogram`
 
-### 4. 编译运行
+建议按下面顺序验证：
 
-编译后按下面顺序验证：
+1. 登录或注册账号
+2. 进入智能填表页
+3. 在同一页上传或勾选来源文档
+4. 在同一页选择模板并输入填表需求
+5. 等所有已选来源文档变为“可填表”后，直接点击“开始智能填表”
+6. 在同一页执行“下载并打开 / 仅下载到本地 / 转发结果”
+7. 如需网页模式，再点击“打开网页智能填表”
 
-1. 在登录页注册一个 DocAI 新账号
-2. 进入文档中心上传源文档
-3. 等待文档解析完成后进入智能填表
-4. 在 AI 对话页直接提问，或先从文档中心关联文档再提问
+## 当前关键文件
 
-## 默认配置
-
-小程序接口配置文件：
-
-- `miniprogram/config.js`
-
-默认内容：
-
-```js
-const LOCAL_API_BASE_URL = 'http://127.0.0.1:8080/api/v1'
-const LOCAL_API_FALLBACK_URLS = ['http://127.0.0.1:18080/api/v1']
-const REMOTE_API_BASE_URL = 'http://docai.sa1.tunnelfrp.com/api/v1'
-const useRemoteApiBaseUrl = false
-```
-
-## 已完成的后端对齐
-
-### 用户认证
-
-- 登录和注册统一改为 `POST /api/v1/users/auth`
-- 当前用户改为 `GET /api/v1/users/info`
-- 退出登录改为 `POST /api/v1/users/logout`
-
-### 源文档
-
-- 文档列表改为 `GET /api/v1/source/documents`
-- 文档上传改为 `POST /api/v1/source/upload`
-- 单个删除改为 `DELETE /api/v1/source/{docId}`
-- 批量删除改为 `POST /api/v1/source/batch-delete`
-
-### 智能填表
-
-- 模板上传改为 `POST /api/v1/template/upload`
-- 模板解析改为 `POST /api/v1/template/{templateId}/parse`
-- 模板填充改为 `POST /api/v1/template/{templateId}/fill`
-- 小程序现在只会使用“已解析完成”的来源文档参与填表
-
-### AI 对话
-
-- 对齐到 `POST /api/v1/ai/chat/stream`
-- 小程序侧增加了对 SSE 返回内容的解析，保持原有 AI 对话界面不变
-- 历史会话、当前会话消息、关联文档信息改为走 `chat_conversations / chat_messages` 对应的后端接口
-- 因此同账号在 Web 端创建的会话和消息，小程序重新进入后可以读取
-
-## 真机调试说明
-
-真机不能直接访问 `127.0.0.1`。如需真机联调，请把 `miniprogram/config.js` 中的地址改成：
-
-- 局域网地址，例如：`http://192.168.x.x:8080/api/v1`
-- 或公网 HTTPS 地址，例如：`https://your-domain/api/v1`
-
-如果使用 `DocAI/docs/项目启动说明书.md` 里的 Ngrok 方案，也可以直接填写对应的 HTTPS 域名。
-
-## 当前联调建议
-
-- 先在文档中心上传资料，再到智能填表页面执行模板填充
-- 文档状态为“解析中”时，暂时不要用于智能填表
-- 若 AI 对话失败，先确认 DocAI 后端服务、网关和模型 Key 已正常启动
-- 已实测共享库中的 `users`、`source_documents`、`chat_conversations`、`chat_messages` 会被小程序和 Web 共用
+- 配置文件：[config.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/config.js)
+- 智能填表入口页：[autofill/index.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/pages/docai/autofill/index.js)
+- 网页填表容器页：[autofill-web/index.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/pages/docai/autofill-web/index.js)
+- 原生流程草稿与结果 session：[autofill-draft.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/utils/autofill-draft.js)
+- 智能填表下载接口封装：[docai.js](/E:/A23服创赛/A23-WXMiniprogram/miniprogram/api/docai.js)

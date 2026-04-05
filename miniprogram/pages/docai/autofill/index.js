@@ -1,164 +1,307 @@
 const api = require('../../../api/docai')
+const config = require('../../../config')
 const { ensureLogin } = require('../../../utils/auth')
+const {
+  loadAutofillDraft,
+  updateAutofillDraft,
+  clearAutofillDraft,
+  saveAutofillResultSession,
+  loadAutofillResultSession,
+  clearAutofillResultSession,
+  getFileTypeFromName,
+} = require('../../../utils/autofill-draft')
+const {
+  rememberAutofillResult,
+  updateAutofillResult,
+} = require('../../../utils/autofill-result')
 
-function isParsedDocument(item) {
-  const status = String((item && item.uploadStatus) || '').toLowerCase()
-  return status === 'parsed' || (!status && item && item.docSummary)
+const WEB_AUTOFILL_NOTICE_KEY = 'docai_autofill_web_notice_ack'
+const DOCUMENT_PICKER_CONTEXT_KEY = 'docai_autofill_document_picker_context'
+const SOURCE_EXTENSIONS = ['docx', 'xlsx', 'txt', 'md']
+const TEMPLATE_EXTENSIONS = ['docx', 'xlsx']
+const SOURCE_POLL_INTERVAL = 4000
+
+function normalizeBaseUrl(url) {
+  return String(url || '').trim().replace(/\/+$/, '')
+}
+
+function normalizeText(value) {
+  return String(value || '').trim()
+}
+
+function toNumber(value) {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function getRemoteWebBaseUrl() {
+  return normalizeBaseUrl(config && config.remoteWebBaseUrl)
+}
+
+function canUseRemoteWebAutofill() {
+  return /^https:\/\//i.test(getRemoteWebBaseUrl())
+}
+
+function getQuestionStageKey(item) {
+  return normalizeText(item && item.questionStageKey).toLowerCase()
+}
+
+function getUploadStatus(item) {
+  return normalizeText(item && item.uploadStatus).toLowerCase()
+}
+
+function toStageKey(item) {
+  const stageKey = getQuestionStageKey(item)
+  if (stageKey) {
+    return stageKey
+  }
+
+  const uploadStatus = getUploadStatus(item)
+  if (uploadStatus === 'failed') {
+    return 'failed'
+  }
+  if (uploadStatus === 'parsing') {
+    return 'parsing'
+  }
+  if (item && (item.canChat === true || uploadStatus === 'parsed' || item.docSummary)) {
+    return 'ready'
+  }
+
+  return 'uploaded'
+}
+
+function buildSourceSummary(list) {
+  return (Array.isArray(list) ? list : []).reduce((summary, item) => {
+    summary.total += 1
+
+    const stageKey = toStageKey(item)
+    if (stageKey === 'ready') {
+      summary.ready += 1
+    } else if (stageKey === 'failed') {
+      summary.failed += 1
+    } else if (stageKey === 'parsing' || stageKey === 'indexing') {
+      summary.parsing += 1
+    } else {
+      summary.uploaded += 1
+    }
+
+    return summary
+  }, {
+    total: 0,
+    ready: 0,
+    parsing: 0,
+    failed: 0,
+    uploaded: 0,
+  })
+}
+
+function buildSourceCard(item, selectedIds) {
+  const stageKey = toStageKey(item)
+  const selected = (selectedIds || []).indexOf(String(item.id)) !== -1
+  const fileType = normalizeText(item && item.fileType).toLowerCase()
+  let stageTone = 'plain'
+
+  if (stageKey === 'ready') {
+    stageTone = 'success'
+  } else if (stageKey === 'parsing') {
+    stageTone = 'warning'
+  } else if (stageKey === 'indexing') {
+    stageTone = 'info'
+  } else if (stageKey === 'failed') {
+    stageTone = 'danger'
+  }
+
+  return Object.assign({}, item, {
+    id: String(item.id),
+    fileName: normalizeText(item.fileName || item.title) || '未命名文档',
+    fileType,
+    typeText: String(fileType || 'file').toUpperCase(),
+    stageKey,
+    stageTone,
+    stageText: normalizeText(item.questionStageText) || '待处理',
+    stageDesc: normalizeText(item.questionStageDesc) || '当前资料还没有可用的处理说明。',
+    selected,
+    selectDisabled: !selected && stageKey === 'failed',
+    actionText: selected ? '移出本次填表' : (stageKey === 'failed' ? '不可选择' : '加入本次填表'),
+  })
+}
+
+function summarizeSelection(list) {
+  return (Array.isArray(list) ? list : []).reduce((summary, item) => {
+    summary.total += 1
+
+    const stageKey = toStageKey(item)
+    if (stageKey === 'ready') {
+      summary.ready += 1
+    } else if (stageKey === 'failed') {
+      summary.failed += 1
+    } else {
+      summary.pending += 1
+    }
+
+    return summary
+  }, {
+    total: 0,
+    ready: 0,
+    pending: 0,
+    failed: 0,
+  })
+}
+
+function buildExecutionBlockedText(summary) {
+  if (!summary.total) {
+    return '请先选择至少 1 份数据源资料，再开始智能填表。'
+  }
+  if (summary.failed > 0) {
+    return '当前选择中有 ' + summary.failed + ' 份失败资料，请先移出后再继续。'
+  }
+  if (summary.pending > 0) {
+    return '当前仍有 ' + summary.pending + ' 份资料未就绪，请刷新状态后再执行。'
+  }
+
+  return '所有已选资料都已进入可填表状态，可以直接开始执行。'
+}
+
+function formatSize(size) {
+  const numericSize = Number(size) || 0
+  const kb = 1024
+  const mb = kb * 1024
+
+  if (numericSize < kb) {
+    return numericSize + ' B'
+  }
+  if (numericSize < mb) {
+    return (numericSize / kb).toFixed(1) + ' KB'
+  }
+
+  return (numericSize / mb).toFixed(1) + ' MB'
+}
+
+function formatDateTime(value) {
+  const timestamp = value ? new Date(value).getTime() : 0
+  if (!timestamp) {
+    return '--'
+  }
+
+  const date = new Date(timestamp)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return month + '-' + day + ' ' + hours + ':' + minutes
+}
+
+function normalizeDecision(item) {
+  if (!item || typeof item !== 'object') {
+    return null
+  }
+
+  const confidence = Number(item.finalConfidence || item.confidence || 0) || 0
+  return {
+    fieldName: normalizeText(item.fieldName || item.slotName || item.placeholder || item.key) || '未命名字段',
+    finalValue: normalizeText(item.finalValue || item.value || item.outputValue),
+    confidenceText: Math.round(confidence * 100) + '%',
+    reason: normalizeText(item.reason),
+  }
+}
+
+function normalizeResultPayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const outputName = normalizeText(payload.outputName || payload.fileName)
+  const templateName = normalizeText(payload.templateName)
+  return {
+    recordId: normalizeText(payload.recordId),
+    templateId: normalizeText(payload.templateId),
+    auditId: normalizeText(payload.auditId),
+    templateName: templateName || '未命名模板',
+    outputName: outputName || templateName || '智能填表结果',
+    outputFile: normalizeText(payload.outputFile),
+    fileType: normalizeText(payload.fileType).toLowerCase() || getFileTypeFromName(outputName || templateName),
+    summaryText: normalizeText(payload.summaryText),
+    filledCount: toNumber(payload.filledCount),
+    blankCount: toNumber(payload.blankCount),
+    totalSlots: toNumber(payload.totalSlots),
+    fillTimeMs: toNumber(payload.fillTimeMs),
+    sourceCount: toNumber(payload.sourceCount),
+    fileSizeText: normalizeText(payload.fileSizeText),
+    createdAtText: formatDateTime(payload.createdAt),
+    decisions: (Array.isArray(payload.decisions) ? payload.decisions : []).map(normalizeDecision).filter(Boolean),
+    sourceDocs: Array.isArray(payload.sourceDocs) ? payload.sourceDocs : [],
+  }
+}
+
+function trimErrorMessage(message, fallbackMessage) {
+  const text = String(message || '').replace(/\s+/g, ' ').trim()
+  return text || fallbackMessage
 }
 
 Page({
   data: {
-    loading: false,
-    templatePath: '',
+    loadingSources: false,
+    refreshingSources: false,
+    uploadingSources: false,
+    submitting: false,
+    downloadingResult: false,
+    sharingResult: false,
+    remoteWebSupported: canUseRemoteWebAutofill(),
+    remoteWebHost: getRemoteWebBaseUrl(),
+    sourceSummary: { total: 0, ready: 0, parsing: 0, failed: 0, uploaded: 0 },
+    sourceDocuments: [],
+    selectedDocIds: [],
+    selectedSourceDocs: [],
+    selectionSummary: { total: 0, ready: 0, pending: 0, failed: 0 },
     templateName: '',
-    templateStatusText: '等待选择模板',
-    sourceDocCount: 0,
+    templateLocalPath: '',
+    userRequirement: '',
+    executionBlockedText: '请先选择至少 1 份数据源资料，再开始智能填表。',
+    progressSteps: ['校验来源资料', '上传模板文件', '解析模板槽位', '执行智能填表'],
+    currentProgressStep: -1,
+    progressText: '',
+    errorText: '',
     resultReady: false,
-    resultText: '',
-    resultMeta: {
-      filledCount: 0,
-      blankCount: 0,
-      totalSlots: 0,
-      fillTimeMs: 0,
-      fileSizeText: '0 B',
-      templateName: '',
-    },
+    result: null,
+    decisionPreview: [],
+    stageItems: [
+      { key: 'uploaded', title: '文件上传成功', desc: '资料已进入 DocAI，等待后台接管解析任务。', tone: 'plain' },
+      { key: 'parsing', title: '文档解析中', desc: 'DocAI 正在提取正文与字段信息，这时先不要直接填表。', tone: 'warning' },
+      { key: 'indexing', title: '建立知识索引中', desc: '内容已被读取，系统正在准备更稳定的检索与字段匹配。', tone: 'info' },
+      { key: 'ready', title: '可填表', desc: '只有进入这一阶段，当前页面才会允许真正开始智能填表。', tone: 'success' },
+    ],
   },
 
   onShow() {
     if (!ensureLogin()) {
       return
     }
-    this.loadSourceSummary()
+
+    this.syncLocalState()
+    this.loadSourceDocuments()
   },
 
-  formatSize(size) {
-    if (!size && size !== 0) {
-      return '-'
-    }
-
-    const kb = 1024
-    const mb = kb * 1024
-    if (size < kb) {
-      return size + ' B'
-    }
-    if (size < mb) {
-      return (size / kb).toFixed(1) + ' KB'
-    }
-    return (size / mb).toFixed(1) + ' MB'
+  onHide() {
+    this.clearSourcePolling()
   },
 
-  async loadSourceSummary() {
-    try {
-      const res = await api.getSourceDocuments()
-      const list = res.data || []
-      this.setData({
-        sourceDocCount: list.filter(isParsedDocument).length,
-      })
-    } catch (err) {
-      this.setData({ sourceDocCount: 0 })
-    }
+  onUnload() {
+    this.clearSourcePolling()
   },
 
-  async chooseTemplate() {
-    try {
-      const pick = await this.chooseMessageFileAsync({
-        count: 1,
-        type: 'file',
-        extension: ['docx', 'xlsx'],
-      })
-      const file = (pick.tempFiles || [])[0]
-      if (!file) {
-        return
-      }
-      this.setData({
-        templatePath: file.path,
-        templateName: file.name,
-        templateStatusText: '模板已就绪，可开始填充',
-        resultReady: false,
-        resultText: '',
-      })
-    } catch (err) {
-      wx.showToast({ title: '未选择模板文件', icon: 'none' })
-    }
-  },
+  syncLocalState() {
+    const draft = loadAutofillDraft()
+    const result = normalizeResultPayload(loadAutofillResultSession())
 
-  async startFill() {
-    if (!ensureLogin()) {
-      return
-    }
-
-    if (!this.data.templatePath) {
-      wx.showToast({ title: '请先选择模板文件', icon: 'none' })
-      return
-    }
-
-    this.setData({ loading: true, resultReady: false, resultText: '' })
-
-    try {
-      const startedAt = Date.now()
-
-      wx.showLoading({ title: '正在上传模板', mask: true })
-      const uploadRes = await api.uploadTemplateFile(this.data.templatePath)
-      const templateInfo = (uploadRes && uploadRes.data) || {}
-      const templateId = (uploadRes.data && uploadRes.data.id) || uploadRes.id
-      if (!templateId) {
-        throw new Error('模板上传失败，未返回模板 ID')
-      }
-
-      this.setData({
-        templateStatusText: '模板已上传，正在解析槽位',
-      })
-
-      wx.showLoading({ title: '正在解析模板', mask: true })
-      const parseRes = await api.parseTemplateSlots(templateId)
-      const slots = parseRes.data || []
-      this.setData({
-        templateStatusText: '模板已解析，识别到 ' + slots.length + ' 个槽位',
-      })
-
-      const sourceIds = await this.getSourceDocIds()
-      if (sourceIds.length === 0) {
-        wx.showToast({ title: '当前没有已解析完成的来源文档', icon: 'none' })
-        return
-      }
-
-      wx.showLoading({ title: '正在执行填表', mask: true })
-      const res = await api.fillTemplate(templateId, sourceIds)
-      const data = res.data || {}
-      const outputFile = String(data.outputFile || '')
-      const outputName = outputFile ? outputFile.split(/[\\/]/).pop() : ''
-      const decisions = Array.isArray(data.decisions) ? data.decisions : []
-
-      this.setData({
-        resultReady: true,
-        resultText: [
-          '本次智能填表已完成。',
-          '已使用 ' + sourceIds.length + ' 份已解析来源文档参与填充。',
-          data.auditId ? '审计编号：' + data.auditId : '',
-          outputName ? '结果文件：' + outputName : '',
-          decisions.length ? '已返回 ' + decisions.length + ' 条决策记录。' : '',
-        ].filter(Boolean).join('\n'),
-        resultMeta: {
-          filledCount: data.filledCount || 0,
-          blankCount: data.blankCount || 0,
-          totalSlots: data.totalSlots || slots.length || 0,
-          fillTimeMs: Date.now() - startedAt,
-          fileSizeText: this.formatSize(templateInfo.fileSize || 0),
-          templateName: templateInfo.fileName || this.data.templateName || '',
-        },
-      })
-      wx.showToast({ title: '填表完成', icon: 'success' })
-    } catch (err) {
-      this.setData({
-        resultReady: true,
-        resultText: (err && err.message) || '智能填表失败，请稍后重试。',
-      })
-      wx.showToast({ title: '智能填表失败', icon: 'none' })
-    } finally {
-      wx.hideLoading()
-      this.setData({ loading: false })
-    }
+    this.setData({
+      selectedDocIds: Array.isArray(draft.sourceDocIds) ? draft.sourceDocIds.map(String) : [],
+      templateName: draft.templateName || '',
+      templateLocalPath: draft.templateLocalPath || '',
+      userRequirement: draft.userRequirement || '',
+      resultReady: Boolean(result),
+      result,
+      decisionPreview: result ? (result.decisions || []).slice(0, 8) : [],
+    })
   },
 
   chooseMessageFileAsync(options) {
@@ -170,16 +313,761 @@ Page({
     })
   },
 
-  async getSourceDocIds() {
+  downloadFileAsync(options) {
+    return new Promise((resolve, reject) => {
+      wx.downloadFile(Object.assign({}, options, {
+        success: resolve,
+        fail: reject,
+      }))
+    })
+  },
+
+  saveFileAsync(tempFilePath) {
+    return new Promise((resolve, reject) => {
+      wx.saveFile({
+        tempFilePath,
+        success: resolve,
+        fail: reject,
+      })
+    })
+  },
+
+  openDocumentAsync(filePath, fileType) {
+    return new Promise((resolve, reject) => {
+      wx.openDocument({
+        filePath,
+        fileType: fileType || undefined,
+        showMenu: true,
+        success: resolve,
+        fail: reject,
+      })
+    })
+  },
+
+  shareFileMessageAsync(filePath, fileName) {
+    return new Promise((resolve, reject) => {
+      if (typeof wx.shareFileMessage !== 'function') {
+        reject(new Error('当前微信环境不支持直接转发文件'))
+        return
+      }
+
+      wx.shareFileMessage({
+        filePath,
+        fileName: fileName || '智能填表结果',
+        success: resolve,
+        fail: reject,
+      })
+    })
+  },
+
+  clearSourcePolling() {
+    if (this.sourcePollTimer) {
+      clearTimeout(this.sourcePollTimer)
+      this.sourcePollTimer = null
+    }
+  },
+
+  scheduleSourcePolling() {
+    this.clearSourcePolling()
+
+    const shouldPoll = (this.data.sourceDocuments || []).some((item) => {
+      return item.stageKey === 'uploaded' || item.stageKey === 'parsing' || item.stageKey === 'indexing'
+    })
+
+    if (!shouldPoll) {
+      return
+    }
+
+    this.sourcePollTimer = setTimeout(() => {
+      this.loadSourceDocuments({ silent: true })
+    }, SOURCE_POLL_INTERVAL)
+  },
+
+  persistDraft(extraPatch) {
+    updateAutofillDraft(Object.assign({
+      sourceDocIds: this.data.selectedDocIds,
+      sourceDocs: this.data.selectedSourceDocs,
+      parsedReadyCount: this.data.selectionSummary.ready,
+      templateLocalPath: this.data.templateLocalPath,
+      templateName: this.data.templateName,
+      userRequirement: this.data.userRequirement,
+    }, extraPatch || {}))
+  },
+
+  async loadSourceDocuments(options) {
+    const silent = Boolean(options && options.silent)
+    const selectedDocIds = (this.data.selectedDocIds || []).slice()
+
+    if (!silent) {
+      this.setData({ loadingSources: true })
+    }
+
     try {
       const res = await api.getSourceDocuments()
-      const list = res.data || []
-      return list
-        .filter((item) => Boolean(item && item.id) && isParsedDocument(item))
-        .slice(0, 10)
-        .map((item) => item.id)
+      const rawDocuments = Array.isArray(res.data) ? res.data : []
+      const sourceDocuments = rawDocuments.map((item) => buildSourceCard(item, selectedDocIds))
+      const selectedSourceDocs = sourceDocuments.filter((item) => item.selected)
+      const nextSelectedDocIds = selectedSourceDocs.map((item) => item.id)
+      const selectionSummary = summarizeSelection(selectedSourceDocs)
+
+      this.setData({
+        sourceSummary: buildSourceSummary(rawDocuments),
+        sourceDocuments,
+        selectedDocIds: nextSelectedDocIds,
+        selectedSourceDocs,
+        selectionSummary,
+        executionBlockedText: buildExecutionBlockedText(selectionSummary),
+      })
+
+      this.persistDraft({
+        sourceDocIds: nextSelectedDocIds,
+        sourceDocs: selectedSourceDocs,
+        parsedReadyCount: selectionSummary.ready,
+      })
+
+      this.scheduleSourcePolling()
     } catch (err) {
-      return []
+      this.setData({
+        errorText: trimErrorMessage(err && err.message, '当前无法加载来源文档列表，请稍后重试。'),
+      })
+      this.clearSourcePolling()
+    } finally {
+      if (!silent) {
+        this.setData({ loadingSources: false })
+      }
     }
+  },
+
+  async refreshSourceStatuses() {
+    if (!ensureLogin() || this.data.refreshingSources) {
+      return
+    }
+
+    this.setData({
+      refreshingSources: true,
+      errorText: '',
+    })
+
+    try {
+      await this.loadSourceDocuments({ silent: true })
+    } finally {
+      this.setData({ refreshingSources: false })
+    }
+  },
+
+  toggleSourceSelection(e) {
+    const docId = String((e.currentTarget.dataset && e.currentTarget.dataset.id) || '')
+    if (!docId) {
+      return
+    }
+
+    const sourceDocuments = this.data.sourceDocuments || []
+    const targetDoc = sourceDocuments.find((item) => item.id === docId)
+    if (!targetDoc) {
+      return
+    }
+
+    if (targetDoc.selectDisabled && !targetDoc.selected) {
+      wx.showToast({
+        title: '处理失败的资料不能继续用于填表',
+        icon: 'none',
+      })
+      return
+    }
+
+    const selectedDocIds = (this.data.selectedDocIds || []).slice()
+    const currentIndex = selectedDocIds.indexOf(docId)
+
+    if (currentIndex >= 0) {
+      selectedDocIds.splice(currentIndex, 1)
+    } else {
+      selectedDocIds.push(docId)
+    }
+
+    const nextSourceDocuments = sourceDocuments.map((item) => buildSourceCard(item, selectedDocIds))
+    const selectedSourceDocs = nextSourceDocuments.filter((item) => item.selected)
+    const selectionSummary = summarizeSelection(selectedSourceDocs)
+
+    this.setData({
+      sourceDocuments: nextSourceDocuments,
+      selectedDocIds,
+      selectedSourceDocs,
+      selectionSummary,
+      executionBlockedText: buildExecutionBlockedText(selectionSummary),
+      errorText: '',
+    })
+
+    this.persistDraft({
+      sourceDocIds: selectedDocIds,
+      sourceDocs: selectedSourceDocs,
+      parsedReadyCount: selectionSummary.ready,
+    })
+  },
+
+  removeSelectedSource(e) {
+    const docId = String((e.currentTarget.dataset && e.currentTarget.dataset.id) || '')
+    if (!docId) {
+      return
+    }
+
+    const selectedDocIds = (this.data.selectedDocIds || []).filter((item) => item !== docId)
+    const nextSourceDocuments = (this.data.sourceDocuments || []).map((item) => buildSourceCard(item, selectedDocIds))
+    const selectedSourceDocs = nextSourceDocuments.filter((item) => item.selected)
+    const selectionSummary = summarizeSelection(selectedSourceDocs)
+
+    this.setData({
+      sourceDocuments: nextSourceDocuments,
+      selectedDocIds,
+      selectedSourceDocs,
+      selectionSummary,
+      executionBlockedText: buildExecutionBlockedText(selectionSummary),
+    })
+
+    this.persistDraft({
+      sourceDocIds: selectedDocIds,
+      sourceDocs: selectedSourceDocs,
+      parsedReadyCount: selectionSummary.ready,
+    })
+  },
+
+  openSourcePicker() {
+    this.goDocuments()
+  },
+
+  async uploadSourceFiles() {
+    if (!ensureLogin() || this.data.uploadingSources) {
+      return
+    }
+
+    try {
+      const pickRes = await this.chooseMessageFileAsync({
+        count: 10,
+        type: 'file',
+        extension: SOURCE_EXTENSIONS,
+      })
+      const files = Array.isArray(pickRes && pickRes.tempFiles) ? pickRes.tempFiles : []
+      if (files.length <= 0) {
+        return
+      }
+
+      this.setData({ uploadingSources: true })
+      wx.showLoading({
+        title: '正在上传资料',
+        mask: true,
+      })
+
+      let successCount = 0
+      const uploadedIds = []
+
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index] || {}
+        const fileName = normalizeText(file.name)
+        const filePath = normalizeText(file.path)
+        if (!fileName || !filePath) {
+          continue
+        }
+
+        try {
+          const res = await api.uploadDocument(filePath, fileName)
+          const uploadedDoc = (res && res.data) || res || {}
+          if (uploadedDoc && (uploadedDoc.id || uploadedDoc.id === 0)) {
+            uploadedIds.push(String(uploadedDoc.id))
+            successCount += 1
+          }
+        } catch (err) {
+          // continue uploading remaining files
+        }
+      }
+
+      if (uploadedIds.length > 0) {
+        const selectedDocIds = (this.data.selectedDocIds || [])
+          .concat(uploadedIds)
+          .filter((item, index, list) => list.indexOf(item) === index)
+
+        this.setData({ selectedDocIds })
+      }
+
+      await this.loadSourceDocuments({ silent: true })
+
+      wx.showToast({
+        title: successCount > 0 ? '已上传 ' + successCount + ' 份资料' : '没有成功上传资料',
+        icon: successCount > 0 ? 'success' : 'none',
+      })
+    } catch (err) {
+      const message = String((err && err.errMsg) || (err && err.message) || '')
+      if (message.indexOf('cancel') === -1) {
+        wx.showToast({
+          title: trimErrorMessage(message, '资料上传失败'),
+          icon: 'none',
+        })
+      }
+    } finally {
+      wx.hideLoading()
+      this.setData({ uploadingSources: false })
+    }
+  },
+
+  async chooseTemplateFile() {
+    if (!ensureLogin()) {
+      return
+    }
+
+    try {
+      const pickRes = await this.chooseMessageFileAsync({
+        count: 1,
+        type: 'file',
+        extension: TEMPLATE_EXTENSIONS,
+      })
+      const file = (pickRes.tempFiles || [])[0]
+      if (!file || !file.path) {
+        return
+      }
+
+      this.setData({
+        templateName: file.name || '未命名模板',
+        templateLocalPath: file.path,
+      })
+
+      this.persistDraft({
+        templateLocalPath: file.path,
+        templateName: file.name || '未命名模板',
+      })
+    } catch (err) {
+      const message = String((err && err.errMsg) || (err && err.message) || '')
+      if (message.indexOf('cancel') === -1) {
+        wx.showToast({
+          title: trimErrorMessage(message, '模板选择失败'),
+          icon: 'none',
+        })
+      }
+    }
+  },
+
+  clearTemplateFile() {
+    this.setData({
+      templateName: '',
+      templateLocalPath: '',
+    })
+
+    this.persistDraft({
+      templateLocalPath: '',
+      templateName: '',
+    })
+  },
+
+  handleRequirementInput(e) {
+    const userRequirement = String((e.detail && e.detail.value) || '')
+    this.setData({ userRequirement })
+    this.persistDraft({ userRequirement })
+  },
+
+  async showModalAsync(options) {
+    return new Promise((resolve) => {
+      wx.showModal(Object.assign({}, options, {
+        success: resolve,
+        fail: () => resolve({ confirm: false, cancel: true }),
+      }))
+    })
+  },
+
+  async confirmWebAutofillEntry() {
+    if (wx.getStorageSync(WEB_AUTOFILL_NOTICE_KEY)) {
+      return true
+    }
+
+    const res = await this.showModalAsync({
+      title: '网页辅助模式',
+      content: [
+        '网页模式只负责打开现有 DocAI 网站版智能填表，不承担当前单页原生主流程。',
+        '当前不会自动继承小程序登录态，首次进入可能仍需在网页端重新登录。',
+      ].join('\n'),
+      confirmText: '继续打开',
+      cancelText: '先不进入',
+    })
+
+    if (!res.confirm) {
+      return false
+    }
+
+    wx.setStorageSync(WEB_AUTOFILL_NOTICE_KEY, 1)
+    return true
+  },
+
+  openWebAutofill() {
+    if (!this.data.remoteWebSupported) {
+      wx.showToast({
+        title: '当前未配置可用的 HTTPS 网页入口',
+        icon: 'none',
+      })
+      return
+    }
+
+    this.confirmWebAutofillEntry().then((confirmed) => {
+      if (!confirmed) {
+        return
+      }
+
+      wx.navigateTo({
+        url: '/pages/docai/autofill-web/index',
+      })
+    })
+  },
+
+  async startAutofill() {
+    if (!ensureLogin() || this.data.submitting) {
+      return
+    }
+
+    const selectionSummary = summarizeSelection(this.data.selectedSourceDocs || [])
+    if (!selectionSummary.total) {
+      wx.showToast({
+        title: '请先选择至少 1 份数据源文档',
+        icon: 'none',
+      })
+      return
+    }
+
+    if (!this.data.templateLocalPath) {
+      wx.showToast({
+        title: '请先选择模板文件',
+        icon: 'none',
+      })
+      return
+    }
+
+    this.setData({
+      submitting: true,
+      currentProgressStep: 0,
+      progressText: '正在刷新并校验当前资料状态…',
+      errorText: '',
+    })
+
+    try {
+      await this.loadSourceDocuments({ silent: true })
+
+      const latestSelectionSummary = summarizeSelection(this.data.selectedSourceDocs || [])
+      if (latestSelectionSummary.failed > 0 || latestSelectionSummary.pending > 0) {
+        throw new Error(buildExecutionBlockedText(latestSelectionSummary))
+      }
+
+      const selectedSourceDocs = this.data.selectedSourceDocs || []
+      const sourceDocIds = selectedSourceDocs.map((item) => item.id)
+      const startedAt = Date.now()
+
+      this.setData({
+        currentProgressStep: 1,
+        progressText: '资料校验完成，正在上传模板文件…',
+      })
+
+      const uploadRes = await api.uploadTemplateFile(this.data.templateLocalPath, this.data.templateName)
+      const templateInfo = (uploadRes && uploadRes.data) || uploadRes || {}
+      const templateId = String((templateInfo.id || templateInfo.templateId || ''))
+      if (!templateId) {
+        throw new Error('模板上传成功，但未返回模板 ID')
+      }
+
+      this.setData({
+        currentProgressStep: 2,
+        progressText: '模板已上传，正在解析模板槽位…',
+      })
+
+      const parseRes = await api.parseTemplateSlots(templateId)
+      const slots = Array.isArray(parseRes && parseRes.data) ? parseRes.data : []
+
+      this.setData({
+        currentProgressStep: 3,
+        progressText: '模板已解析，正在执行智能填表…',
+      })
+
+      const fillRes = await api.fillTemplate(
+        templateId,
+        sourceDocIds,
+        this.data.userRequirement
+      )
+      const fillData = (fillRes && fillRes.data) || {}
+      const outputFile = normalizeText(fillData.outputFile)
+      const outputName = normalizeText(fillData.outputName) || (outputFile ? outputFile.split(/[\\/]/).pop() : '')
+
+      let decisions = []
+      try {
+        const decisionRes = await api.getTemplateDecisions(templateId)
+        decisions = Array.isArray(decisionRes && decisionRes.data) ? decisionRes.data : []
+      } catch (decisionErr) {
+        decisions = []
+      }
+
+      const createdAt = new Date().toISOString()
+      const summaryText = [
+        '本次智能填表已完成。',
+        '已使用 ' + sourceDocIds.length + ' 份已就绪资料参与填充。',
+        fillData.auditId ? '审计编号：' + fillData.auditId : '',
+        outputName ? '结果文件：' + outputName : '',
+        decisions.length ? '已生成 ' + decisions.length + ' 条填表决策记录。' : '本次没有返回可展示的决策记录。',
+      ].filter(Boolean).join('\n')
+
+      const storedResult = rememberAutofillResult({
+        templateId,
+        auditId: fillData.auditId || '',
+        outputFile,
+        outputName: outputName || this.data.templateName,
+        templateName: templateInfo.fileName || this.data.templateName || '',
+        createdAt,
+        sourceCount: sourceDocIds.length,
+        filledCount: fillData.filledCount || 0,
+        blankCount: fillData.blankCount || 0,
+        totalSlots: fillData.totalSlots || slots.length || 0,
+        fillTimeMs: Date.now() - startedAt,
+        summaryText,
+      })
+
+      const result = normalizeResultPayload({
+        recordId: storedResult.recordId,
+        templateId,
+        auditId: fillData.auditId || '',
+        templateName: templateInfo.fileName || this.data.templateName || '',
+        outputName: outputName || this.data.templateName || '',
+        outputFile,
+        fileType: getFileTypeFromName(outputName || this.data.templateName),
+        summaryText,
+        filledCount: fillData.filledCount || 0,
+        blankCount: fillData.blankCount || 0,
+        totalSlots: fillData.totalSlots || slots.length || 0,
+        fillTimeMs: Date.now() - startedAt,
+        sourceCount: sourceDocIds.length,
+        fileSizeText: formatSize(templateInfo.fileSize || 0),
+        decisions,
+        sourceDocs: selectedSourceDocs,
+        createdAt,
+      })
+
+      saveAutofillResultSession(result)
+      this.setData({
+        resultReady: true,
+        result,
+        decisionPreview: (result.decisions || []).slice(0, 8),
+        progressText: '填表完成，结果已经生成，可直接在当前页下载或转发。',
+      })
+
+      wx.showToast({
+        title: '智能填表完成',
+        icon: 'success',
+      })
+    } catch (err) {
+      this.setData({
+        errorText: trimErrorMessage(err && err.message, '智能填表失败，请稍后重试。'),
+      })
+      wx.showToast({
+        title: '智能填表失败',
+        icon: 'none',
+      })
+    } finally {
+      this.setData({ submitting: false })
+    }
+  },
+
+  async downloadResult(action) {
+    const result = this.data.result
+    if (!result || !result.templateId || this.data.downloadingResult) {
+      return
+    }
+
+    const token = wx.getStorageSync('token') || ''
+    if (!token) {
+      wx.showToast({
+        title: '登录已过期，请重新登录',
+        icon: 'none',
+      })
+      return
+    }
+
+    const downloadUrl = api.buildTemplateResultDownloadUrl(result.templateId)
+    if (!downloadUrl) {
+      wx.showToast({
+        title: '结果下载地址无效',
+        icon: 'none',
+      })
+      return
+    }
+
+    this.setData({ downloadingResult: true })
+    wx.showLoading({
+      title: '正在下载结果',
+      mask: true,
+    })
+
+    try {
+      const downloadRes = await this.downloadFileAsync({
+        url: downloadUrl,
+        header: {
+          Authorization: 'Bearer ' + token,
+        },
+        timeout: 120000,
+      })
+
+      if (!downloadRes || Number(downloadRes.statusCode) !== 200 || !downloadRes.tempFilePath) {
+        if (Number(downloadRes && downloadRes.statusCode) === 401) {
+          throw new Error('登录已过期，请重新登录')
+        }
+        throw new Error('结果文件下载失败')
+      }
+
+      if (action === 'save') {
+        const saveRes = await this.saveFileAsync(downloadRes.tempFilePath)
+        updateAutofillResult(result.recordId, {
+          savedFilePath: saveRes.savedFilePath || '',
+          lastDownloadedAt: new Date().toISOString(),
+        })
+        wx.showToast({
+          title: '已下载到本地',
+          icon: 'success',
+        })
+      } else {
+        updateAutofillResult(result.recordId, {
+          lastDownloadedAt: new Date().toISOString(),
+        })
+
+        try {
+          await this.openDocumentAsync(downloadRes.tempFilePath, result.fileType)
+          wx.showToast({
+            title: '已下载并打开',
+            icon: 'success',
+          })
+        } catch (openErr) {
+          wx.showToast({
+            title: '已下载，可稍后打开',
+            icon: 'none',
+          })
+        }
+      }
+    } catch (err) {
+      wx.showToast({
+        title: trimErrorMessage(err && err.message, '结果下载失败'),
+        icon: 'none',
+      })
+    } finally {
+      wx.hideLoading()
+      this.setData({ downloadingResult: false })
+    }
+  },
+
+  async shareResult() {
+    const result = this.data.result
+    if (!result || !result.templateId || this.data.sharingResult) {
+      return
+    }
+
+    const token = wx.getStorageSync('token') || ''
+    if (!token) {
+      wx.showToast({
+        title: '登录已过期，请重新登录',
+        icon: 'none',
+      })
+      return
+    }
+
+    const downloadUrl = api.buildTemplateResultDownloadUrl(result.templateId)
+    if (!downloadUrl) {
+      wx.showToast({
+        title: '结果下载地址无效',
+        icon: 'none',
+      })
+      return
+    }
+
+    this.setData({ sharingResult: true })
+    wx.showLoading({
+      title: '正在准备转发',
+      mask: true,
+    })
+
+    try {
+      const downloadRes = await this.downloadFileAsync({
+        url: downloadUrl,
+        header: {
+          Authorization: 'Bearer ' + token,
+        },
+        timeout: 120000,
+      })
+
+      if (!downloadRes || Number(downloadRes.statusCode) !== 200 || !downloadRes.tempFilePath) {
+        throw new Error('结果文件下载失败')
+      }
+
+      try {
+        await this.shareFileMessageAsync(downloadRes.tempFilePath, result.outputName)
+        updateAutofillResult(result.recordId, {
+          lastDownloadedAt: new Date().toISOString(),
+        })
+        wx.showToast({
+          title: '已打开转发面板',
+          icon: 'success',
+        })
+        return
+      } catch (shareErr) {
+        const message = String((shareErr && shareErr.errMsg) || (shareErr && shareErr.message) || '')
+        if (message.indexOf('cancel') !== -1) {
+          return
+        }
+      }
+
+      await this.openDocumentAsync(downloadRes.tempFilePath, result.fileType)
+      wx.showToast({
+        title: '当前环境不支持直接转发，请在文档菜单中继续转发',
+        icon: 'none',
+      })
+    } catch (err) {
+      wx.showToast({
+        title: trimErrorMessage(err && err.message, '转发准备失败'),
+        icon: 'none',
+      })
+    } finally {
+      wx.hideLoading()
+      this.setData({ sharingResult: false })
+    }
+  },
+
+  handleDownloadOpen() {
+    this.downloadResult('open')
+  },
+
+  handleDownloadSave() {
+    this.downloadResult('save')
+  },
+
+  handleShareResult() {
+    this.shareResult()
+  },
+
+  resetCurrentFlow() {
+    clearAutofillDraft()
+    clearAutofillResultSession()
+    this.setData({
+      selectedDocIds: [],
+      selectedSourceDocs: [],
+      selectionSummary: { total: 0, ready: 0, pending: 0, failed: 0 },
+      templateName: '',
+      templateLocalPath: '',
+      userRequirement: '',
+      currentProgressStep: -1,
+      progressText: '',
+      errorText: '',
+      resultReady: false,
+      result: null,
+      decisionPreview: [],
+      executionBlockedText: '请先选择至少 1 份数据源资料，再开始智能填表。',
+    })
+
+    this.loadSourceDocuments()
+  },
+
+  goDocuments() {
+    wx.setStorageSync(DOCUMENT_PICKER_CONTEXT_KEY, {
+      returnUrl: '/pages/docai/autofill/index',
+      createdAt: Date.now(),
+      source: 'autofill',
+    })
+    wx.switchTab({
+      url: '/pages/docai/documents/index',
+    })
   },
 })

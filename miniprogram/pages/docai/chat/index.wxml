@@ -165,6 +165,7 @@
         value="{{inputText}}"
         maxlength="2000"
         auto-height="false"
+        disabled="{{currentDoc.id && !canAskCurrentDoc}}"
         show-confirm-bar="false"
         adjust-position="false"
         confirm-type="send"
@@ -178,7 +179,7 @@
       />
 
       <view
-        class="composer-bar__send {{canSend ? 'composer-bar__send--active' : ''}}"
+        class="composer-bar__send {{canSend && canAskCurrentDoc ? 'composer-bar__send--active' : ''}}"
         bindtap="sendMessage"
       >
         <view class="composer-bar__send-icon">
@@ -264,13 +265,17 @@
         <view
           wx:for="{{documentOptions}}"
           wx:key="id"
-          class="document-item {{currentDoc.id === item.id ? 'document-item--active' : ''}}"
+          class="document-item {{currentDoc.id === item.id ? 'document-item--active' : ''}} {{item.canChat === false ? 'document-item--disabled' : ''}}"
           data-id="{{item.id}}"
           bindtap="chooseDocument"
         >
           <view class="document-item__main">
             <view class="document-item__title">{{item.title}}</view>
             <view class="document-item__meta">{{item.meta}}</view>
+            <view wx:if="{{item.questionStageText}}" class="document-item__stage document-item__stage--{{item.questionStageTone || 'plain'}}">
+              {{item.questionStageText}}
+            </view>
+            <view wx:if="{{item.questionStageDesc}}" class="document-item__desc">{{item.questionStageDesc}}</view>
           </view>
           <view wx:if="{{currentDoc.id === item.id}}" class="document-item__tag">{{ui.currentLinked}}</view>
         </view>

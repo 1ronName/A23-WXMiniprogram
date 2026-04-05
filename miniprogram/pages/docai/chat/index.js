@@ -1,5 +1,6 @@
 const api = require('../../../api/docai')
 const { ensureLogin } = require('../../../utils/auth')
+const { isDocumentReady } = require('../../../utils/document-stage')
 
 const CURRENT_SESSION_STORAGE_KEY = 'docai_chat_current_session_id'
 const LINKED_DOC_STORAGE_KEY = 'docai_current_doc'
@@ -93,7 +94,15 @@ function createMessageId() {
 }
 
 function getEmptyDoc() {
-  return { id: '', title: '' }
+  return {
+    id: '',
+    title: '',
+    uploadStatus: '',
+    questionStageKey: '',
+    questionStageText: '',
+    questionStageDesc: '',
+    canChat: false,
+  }
 }
 
 function normalizeDoc(doc) {
@@ -104,6 +113,11 @@ function normalizeDoc(doc) {
   return {
     id: String(doc.id),
     title: doc.title || doc.fileName || UI_TEXT.untitledDoc,
+    uploadStatus: doc.uploadStatus || '',
+    questionStageKey: doc.questionStageKey || '',
+    questionStageText: doc.questionStageText || '',
+    questionStageDesc: doc.questionStageDesc || '',
+    canChat: typeof doc.canChat === 'boolean' ? doc.canChat : isDocumentReady(doc),
   }
 }
 
@@ -306,6 +320,10 @@ function buildHistorySections(list) {
 }
 
 function getQuickPrompts(currentDoc) {
+  if (currentDoc && currentDoc.id && currentDoc.canChat === false) {
+    return []
+  }
+
   if (currentDoc && currentDoc.id) {
     return [
       { key: 'summary', label: UI_TEXT.quickSummary, desc: UI_TEXT.quickSummaryDesc, prompt: UI_TEXT.quickSummary },
@@ -323,18 +341,27 @@ function getQuickPrompts(currentDoc) {
   ]
 }
 
+function canAskWithCurrentDoc(currentDoc) {
+  return !(currentDoc && currentDoc.id) || currentDoc.canChat !== false
+}
+
 function buildContextView(currentDoc) {
   if (currentDoc && currentDoc.id) {
+    const canAsk = canAskWithCurrentDoc(currentDoc)
+
     return {
-      topSubtitle: UI_TEXT.subtitleLinked,
-      contextBadge: UI_TEXT.badgeLinked,
+      topSubtitle: canAsk ? UI_TEXT.subtitleLinked : (currentDoc.questionStageText || UI_TEXT.docProcessing),
+      contextBadge: canAsk ? UI_TEXT.badgeLinked : '处理中',
       contextTitle: UI_TEXT.contextLinkedPrefix + currentDoc.title,
-      contextDesc: UI_TEXT.contextLinkedDesc,
+      contextDesc: canAsk ? UI_TEXT.contextLinkedDesc : (currentDoc.questionStageDesc || UI_TEXT.docProcessingDesc),
       primaryActionText: UI_TEXT.changeDocument,
-      emptyTitle: UI_TEXT.welcomeLinkedTitle,
-      emptyDesc: UI_TEXT.welcomeLinkedPrefix + currentDoc.title + UI_TEXT.welcomeLinkedSuffix,
+      emptyTitle: canAsk ? UI_TEXT.welcomeLinkedTitle : (currentDoc.questionStageText || UI_TEXT.docProcessing),
+      emptyDesc: canAsk
+        ? UI_TEXT.welcomeLinkedPrefix + currentDoc.title + UI_TEXT.welcomeLinkedSuffix
+        : (currentDoc.questionStageDesc || UI_TEXT.docProcessingDesc),
       quickPrompts: getQuickPrompts(currentDoc),
-      inputPlaceholder: UI_TEXT.inputLinked,
+      inputPlaceholder: canAsk ? UI_TEXT.inputLinked : '当前文档准备完成后才可提问',
+      canAskCurrentDoc: canAsk,
     }
   }
 
@@ -348,6 +375,7 @@ function buildContextView(currentDoc) {
     emptyDesc: UI_TEXT.welcomeFreeDesc,
     quickPrompts: getQuickPrompts(getEmptyDoc()),
     inputPlaceholder: UI_TEXT.inputFree,
+    canAskCurrentDoc: true,
   }
 }
 
@@ -443,6 +471,67 @@ function resolveErrorType(err) {
   return 'service-busy'
 }
 
+function isAuthError(err) {
+  const statusCode = Number((err && err.statusCode) || (err && err.code) || 0)
+  if (statusCode === 401) {
+    return true
+  }
+
+  const message = String(
+    (err && (err.message || err.errMsg || err.msg))
+      || (err && err.data && err.data.message)
+      || ''
+  ).toLowerCase()
+
+  return message.indexOf('login expired') !== -1
+    || message.indexOf('token') !== -1
+    || message.indexOf('令牌') !== -1
+    || message.indexOf('登录') !== -1
+}
+
+function buildProgressNotice(progressEvent) {
+  const detail = String(
+    (progressEvent && (progressEvent.detail || progressEvent.reply || progressEvent.message))
+      || ''
+  ).trim()
+
+  return {
+    type: 'doc-processing',
+    title: (progressEvent && progressEvent.message) || UI_TEXT.docProcessing,
+    desc: detail || UI_TEXT.docProcessingDesc,
+    actionText: '',
+  }
+}
+
+function buildDocumentStageNotice(currentDoc) {
+  const nextDoc = normalizeDoc(currentDoc)
+
+  return {
+    type: 'doc-processing',
+    title: nextDoc.questionStageText || UI_TEXT.docProcessing,
+    desc: nextDoc.questionStageDesc || UI_TEXT.docProcessingDesc,
+    actionText: '',
+  }
+}
+
+function buildErrorNotice(err) {
+  const noticeType = resolveErrorType(err)
+  const message = String(
+    (err && (err.message || err.errMsg || err.msg))
+      || (err && err.data && err.data.message)
+      || ''
+  ).trim()
+  const notice = buildNotice(noticeType)
+
+  if (!message || isAuthError(err)) {
+    return notice
+  }
+
+  return Object.assign({}, notice, {
+    desc: message,
+  })
+}
+
 function buildDocumentOption(item) {
   const title = item.fileName || item.title || UI_TEXT.untitledDoc
   const fileType = String(item.fileType || '').toUpperCase()
@@ -464,6 +553,12 @@ function buildDocumentOption(item) {
     title,
     meta: metaParts.join(' / '),
     modifiedAtValue: getTimeValue(modifiedAt),
+    uploadStatus: item.uploadStatus || '',
+    questionStageKey: item.questionStageKey || '',
+    questionStageText: item.questionStageText || '',
+    questionStageDesc: item.questionStageDesc || '',
+    questionStageTone: item.questionStageTone || '',
+    canChat: typeof item.canChat === 'boolean' ? item.canChat : isDocumentReady(item),
   }
 }
 
@@ -489,6 +584,7 @@ Page({
     emptyDesc: UI_TEXT.welcomeFreeDesc,
     quickPrompts: getQuickPrompts(getEmptyDoc()),
     inputPlaceholder: UI_TEXT.inputFree,
+    canAskCurrentDoc: true,
     showHistoryPopup: false,
     historySections: buildHistorySections([]),
     showMorePopup: false,
@@ -505,6 +601,8 @@ Page({
 
     this.didInit = false
     this.noticeTimer = null
+    this.currentDocPollTimer = null
+    this.documentPickerPollTimer = null
     this.lastQuestion = ''
     this.sessionList = []
 
@@ -528,8 +626,15 @@ Page({
     await this.syncLinkedDocument()
   },
 
+  onHide() {
+    this.stopCurrentDocPolling()
+    this.stopDocumentPickerPolling()
+  },
+
   onUnload() {
     this.clearNoticeTimer()
+    this.stopCurrentDocPolling()
+    this.stopDocumentPickerPolling()
   },
 
   buildViewState(currentDoc, messages) {
@@ -655,7 +760,7 @@ Page({
       messages = []
     }
 
-    const currentDoc = normalizeDoc(targetSession.currentDoc)
+    const currentDoc = await this.resolveCurrentDocState(targetSession.currentDoc)
     const viewState = this.buildViewState(currentDoc, messages)
 
     this.setData(Object.assign({
@@ -675,12 +780,16 @@ Page({
 
     wx.setStorageSync(CURRENT_SESSION_STORAGE_KEY, targetSession.id)
     this.syncCurrentDocStorage(currentDoc)
+    this.scheduleCurrentDocPolling(currentDoc)
+    if (currentDoc.id && !currentDoc.canChat) {
+      this.showDocumentStageNotice(currentDoc)
+    }
     this.scrollToAnchor(messages.length ? 'msg-' + messages[messages.length - 1].id : 'chat-anchor-top')
     return true
   },
 
   async startNewConversation(options) {
-    const nextDoc = normalizeDoc((options && options.doc) || this.data.currentDoc || getEmptyDoc())
+    const nextDoc = await this.resolveCurrentDocState((options && options.doc) || this.data.currentDoc || getEmptyDoc())
 
     try {
       const payload = {
@@ -721,8 +830,13 @@ Page({
       this.syncCurrentDocStorage(nextDoc)
       this.scrollToAnchor('chat-anchor-top')
 
-      if (options && options.noticeType) {
+      if (nextDoc.id && !nextDoc.canChat) {
+        this.showDocumentStageNotice(nextDoc)
+        this.scheduleCurrentDocPolling(nextDoc)
+      } else if (options && options.noticeType) {
         this.showStateNotice(options.noticeType)
+      } else {
+        this.clearStateNotice()
       }
 
       if (options && options.toast && !options.silent) {
@@ -754,11 +868,124 @@ Page({
     wx.removeStorageSync(LINKED_DOC_STORAGE_KEY)
   },
 
+  async resolveCurrentDocState(currentDoc) {
+    const nextDoc = normalizeDoc(currentDoc)
+    if (!nextDoc.id) {
+      return nextDoc
+    }
+
+    try {
+      const res = await api.getDocument(nextDoc.id)
+      return normalizeDoc(Object.assign({}, nextDoc, res.data || {}))
+    } catch (err) {
+      return nextDoc
+    }
+  },
+
+  hasProcessingDocumentOptions() {
+    return (this.data.documentOptions || []).some((item) => item.canChat === false && item.questionStageKey !== 'failed')
+  },
+
+  stopCurrentDocPolling() {
+    if (this.currentDocPollTimer) {
+      clearTimeout(this.currentDocPollTimer)
+      this.currentDocPollTimer = null
+    }
+  },
+
+  stopDocumentPickerPolling() {
+    if (this.documentPickerPollTimer) {
+      clearTimeout(this.documentPickerPollTimer)
+      this.documentPickerPollTimer = null
+    }
+  },
+
+  scheduleCurrentDocPolling(currentDoc) {
+    const targetDoc = normalizeDoc(currentDoc || this.data.currentDoc)
+
+    this.stopCurrentDocPolling()
+
+    if (!targetDoc.id || canAskWithCurrentDoc(targetDoc) || targetDoc.questionStageKey === 'failed') {
+      return
+    }
+
+    this.currentDocPollTimer = setTimeout(async () => {
+      this.currentDocPollTimer = null
+
+      if (!ensureLogin()) {
+        return
+      }
+
+      const activeDocId = String(this.data.currentDoc.id || '')
+      if (activeDocId !== targetDoc.id) {
+        return
+      }
+
+      const wasBlocked = !canAskWithCurrentDoc(this.data.currentDoc)
+      const latestDoc = await this.resolveCurrentDocState(targetDoc)
+
+      if (String(this.data.currentDoc.id || '') !== targetDoc.id) {
+        return
+      }
+
+      const viewState = this.buildViewState(latestDoc, this.data.messages)
+      const nextNotice = latestDoc.id && !latestDoc.canChat
+        ? buildDocumentStageNotice(latestDoc)
+        : null
+
+      this.setData(Object.assign({
+        currentDoc: latestDoc,
+        stateNotice: nextNotice,
+      }, viewState))
+
+      this.syncCurrentDocStorage(latestDoc)
+
+      if (this.data.currentSessionId) {
+        this.updateSessionMetaLocal(this.data.currentSessionId, {
+          currentDoc: latestDoc,
+        })
+      }
+
+      if (!latestDoc.canChat && latestDoc.questionStageKey !== 'failed') {
+        this.scheduleCurrentDocPolling(latestDoc)
+        return
+      }
+
+      if (wasBlocked && latestDoc.canChat) {
+        wx.showToast({
+          title: latestDoc.questionStageText || '\u6587\u6863\u5df2\u5c31\u7eea',
+          icon: 'none',
+        })
+      }
+    }, 3000)
+  },
+
+  scheduleDocumentPickerPolling() {
+    this.stopDocumentPickerPolling()
+
+    if (!this.data.showDocumentPopup || !this.hasProcessingDocumentOptions()) {
+      return
+    }
+
+    this.documentPickerPollTimer = setTimeout(async () => {
+      this.documentPickerPollTimer = null
+
+      if (!ensureLogin() || !this.data.showDocumentPopup) {
+        return
+      }
+
+      await this.ensureDocumentsLoaded(true)
+    }, 3000)
+  },
+
   async syncLinkedDocument() {
-    const linkedDoc = normalizeDoc(wx.getStorageSync(LINKED_DOC_STORAGE_KEY))
+    const linkedDoc = await this.resolveCurrentDocState(wx.getStorageSync(LINKED_DOC_STORAGE_KEY))
     const currentDoc = normalizeDoc(this.data.currentDoc)
     const hasMessages = this.data.messages.length > 0
-    const changed = linkedDoc.id !== currentDoc.id || linkedDoc.title !== currentDoc.title
+    const docIdentityChanged = linkedDoc.id !== currentDoc.id || linkedDoc.title !== currentDoc.title
+    const docStateChanged = linkedDoc.uploadStatus !== currentDoc.uploadStatus
+      || linkedDoc.questionStageKey !== currentDoc.questionStageKey
+      || linkedDoc.canChat !== currentDoc.canChat
 
     if (!linkedDoc.id) {
       if (!hasMessages && currentDoc.id) {
@@ -767,11 +994,12 @@ Page({
       return
     }
 
-    if (!changed) {
+    if (!docIdentityChanged && !docStateChanged) {
+      this.scheduleCurrentDocPolling(linkedDoc)
       return
     }
 
-    if (hasMessages) {
+    if (hasMessages && docIdentityChanged) {
       await this.startNewConversation({
         doc: linkedDoc,
         noticeType: 'doc-processing',
@@ -786,7 +1014,7 @@ Page({
   },
 
   async applyCurrentDoc(currentDoc, options) {
-    const nextDoc = normalizeDoc(currentDoc)
+    const nextDoc = await this.resolveCurrentDocState(currentDoc)
     const viewState = this.buildViewState(nextDoc, this.data.messages)
 
     this.setData(Object.assign({
@@ -813,9 +1041,20 @@ Page({
       }
     }
 
+    if (nextDoc.id && !nextDoc.canChat) {
+      this.showDocumentStageNotice(nextDoc)
+      this.scheduleCurrentDocPolling(nextDoc)
+      return
+    }
+
+    this.stopCurrentDocPolling()
+
     if (options && options.noticeType) {
       this.showStateNotice(options.noticeType)
+      return
     }
+
+    this.clearStateNotice()
   },
 
   clearNoticeTimer() {
@@ -836,6 +1075,13 @@ Page({
         this.setData({ stateNotice: null })
       }, 2400)
     }
+  },
+
+  showDocumentStageNotice(currentDoc) {
+    this.clearNoticeTimer()
+    this.setData({
+      stateNotice: buildDocumentStageNotice(currentDoc),
+    })
   },
 
   clearStateNotice() {
@@ -874,6 +1120,7 @@ Page({
 
   async openHistory() {
     await this.refreshRemoteHistory()
+    this.stopDocumentPickerPolling()
     this.setData({
       showHistoryPopup: true,
       showMorePopup: false,
@@ -882,6 +1129,7 @@ Page({
   },
 
   openMore() {
+    this.stopDocumentPickerPolling()
     this.setData({
       showMorePopup: true,
       showHistoryPopup: false,
@@ -891,6 +1139,7 @@ Page({
   },
 
   closeMask() {
+    this.stopDocumentPickerPolling()
     this.setData({
       showHistoryPopup: false,
       showMorePopup: false,
@@ -1013,6 +1262,7 @@ Page({
     })
 
     await this.ensureDocumentsLoaded()
+    this.scheduleDocumentPickerPolling()
   },
 
   async ensureDocumentsLoaded(force) {
@@ -1048,6 +1298,11 @@ Page({
       this.setData({
         documentLoading: false,
       })
+      if (this.data.showDocumentPopup) {
+        this.scheduleDocumentPickerPolling()
+      } else {
+        this.stopDocumentPickerPolling()
+      }
     }
   },
 
@@ -1063,11 +1318,27 @@ Page({
       return
     }
 
+    if (targetDoc.canChat === false) {
+      this.showDocumentStageNotice(targetDoc)
+      this.scheduleDocumentPickerPolling()
+      wx.showToast({
+        title: targetDoc.questionStageText || UI_TEXT.docProcessing,
+        icon: 'none',
+      })
+      return
+    }
+
+    this.stopDocumentPickerPolling()
     this.setData({ showDocumentPopup: false })
 
     const nextDoc = {
       id: targetDoc.id,
       title: targetDoc.title,
+      uploadStatus: targetDoc.uploadStatus,
+      questionStageKey: targetDoc.questionStageKey,
+      questionStageText: targetDoc.questionStageText,
+      questionStageDesc: targetDoc.questionStageDesc,
+      canChat: targetDoc.canChat,
     }
 
     if (nextDoc.id === this.data.currentDoc.id && nextDoc.title === this.data.currentDoc.title) {
@@ -1104,6 +1375,12 @@ Page({
 
   retryLastRequest() {
     if (!this.lastQuestion || this.data.loading) {
+      return
+    }
+
+    if (this.data.currentDoc.id && !this.data.canAskCurrentDoc) {
+      this.showDocumentStageNotice(this.data.currentDoc)
+      this.scheduleCurrentDocPolling(this.data.currentDoc)
       return
     }
 
@@ -1152,6 +1429,16 @@ Page({
       return
     }
 
+    if (this.data.currentDoc.id && !this.data.canAskCurrentDoc) {
+      this.showDocumentStageNotice(this.data.currentDoc)
+      this.scheduleCurrentDocPolling(this.data.currentDoc)
+      wx.showToast({
+        title: this.data.currentDoc.questionStageText || UI_TEXT.docProcessing,
+        icon: 'none',
+      })
+      return
+    }
+
     if (!this.data.currentSessionId) {
       const created = await this.startNewConversation({
         doc: this.data.currentDoc,
@@ -1196,6 +1483,29 @@ Page({
     this.requestAiReply(question)
   },
 
+  handleAiProgress(progressEvent) {
+    if (!this.data.loading) {
+      return
+    }
+
+    this.setData({
+      stateNotice: buildProgressNotice(progressEvent),
+    })
+  },
+
+  handleAuthExpired() {
+    wx.showToast({
+      title: '登录已过期，请重新登录',
+      icon: 'none',
+    })
+
+    setTimeout(() => {
+      wx.reLaunch({
+        url: '/pages/docai/login/index',
+      })
+    }, 300)
+  },
+
   async requestAiReply(question) {
     try {
       const payload = {
@@ -1206,7 +1516,11 @@ Page({
         payload.documentId = this.data.currentDoc.id
       }
 
-      const res = await api.aiChat(payload)
+      const res = await api.aiChat(payload, {
+        onProgress: (progressEvent) => {
+          this.handleAiProgress(progressEvent)
+        },
+      })
       const aiText = getReplyText((res && res.data) || res)
       const aiMessage = buildMessage('ai', aiText)
       const messages = this.data.messages.concat([aiMessage])
@@ -1222,13 +1536,22 @@ Page({
       this.saveConversationMessage('ai', aiText)
       this.scrollToAnchor('msg-' + aiMessage.id)
     } catch (err) {
-      const noticeType = resolveErrorType(err)
       const viewState = this.buildViewState(this.data.currentDoc, this.data.messages)
+
+      if (isAuthError(err)) {
+        this.setData(Object.assign({
+          loading: false,
+          pendingReply: false,
+          stateNotice: null,
+        }, viewState))
+        this.handleAuthExpired()
+        return
+      }
 
       this.setData(Object.assign({
         loading: false,
         pendingReply: false,
-        stateNotice: buildNotice(noticeType),
+        stateNotice: buildErrorNotice(err),
       }, viewState))
     }
   },

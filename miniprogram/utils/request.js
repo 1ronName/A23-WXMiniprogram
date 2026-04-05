@@ -8,6 +8,41 @@ function getAppSafe() {
   }
 }
 
+function getRequestConfig() {
+  const runtimeConfig = config && typeof config.getRuntimeConfig === 'function'
+    ? config.getRuntimeConfig()
+    : config
+
+  return Object.assign({
+    apiBaseUrl: '',
+    apiBaseFallbackUrls: [],
+    requestTimeout: 120000,
+    aiRequestTimeout: 300000,
+    realDeviceApiBaseUrl: '',
+  }, runtimeConfig || {})
+}
+
+function detectRuntimePlatform() {
+  if (config && typeof config.detectRuntimePlatform === 'function') {
+    return config.detectRuntimePlatform()
+  }
+
+  if (typeof wx === 'undefined' || !wx || typeof wx.getSystemInfoSync !== 'function') {
+    return 'devtools'
+  }
+
+  try {
+    const systemInfo = wx.getSystemInfoSync() || {}
+    return String(systemInfo.platform || '').toLowerCase() || 'devtools'
+  } catch (err) {
+    return 'devtools'
+  }
+}
+
+function isRealDeviceRuntime() {
+  return detectRuntimePlatform() !== 'devtools'
+}
+
 function normalizeBaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '')
 }
@@ -71,24 +106,64 @@ function uniqueUrls(list) {
 }
 
 function getConfiguredBaseUrls() {
-  return uniqueUrls([config.apiBaseUrl].concat(config.apiBaseFallbackUrls || []))
+  const runtimeConfig = getRequestConfig()
+  return filterReachableBaseUrls([runtimeConfig.apiBaseUrl].concat(runtimeConfig.apiBaseFallbackUrls || []))
+}
+
+function extractHost(url) {
+  const matched = normalizeBaseUrl(url).match(/^https?:\/\/([^/:?#]+)/i)
+  return matched ? String(matched[1] || '').toLowerCase() : ''
+}
+
+function isLoopbackHost(host) {
+  return host === '127.0.0.1'
+    || host === 'localhost'
+    || host === '::1'
+}
+
+function isReachableInCurrentRuntime(baseUrl) {
+  if (!baseUrl) {
+    return false
+  }
+
+  if (!isRealDeviceRuntime()) {
+    return true
+  }
+
+  return !isLoopbackHost(extractHost(baseUrl))
+}
+
+function filterReachableBaseUrls(list) {
+  return uniqueUrls(list).filter(isReachableInCurrentRuntime)
+}
+
+function buildUnavailableBaseUrlError() {
+  const runtimeConfig = getRequestConfig()
+  const exampleUrl = normalizeBaseUrl(runtimeConfig.realDeviceApiBaseUrl) || 'http://192.168.x.x:8080/api/v1'
+
+  return {
+    statusCode: 0,
+    message: '\u5f53\u524d\u662f\u771f\u673a\u8c03\u8bd5\uff0c\u4f46\u540e\u7aef\u5730\u5740\u4ecd\u6307\u5411 127.0.0.1 / localhost\uff0c\u624b\u673a\u65e0\u6cd5\u8bbf\u95ee\u7535\u8111\u672c\u673a\u3002\u8bf7\u5728 miniprogram/config.js \u4e2d\u4f7f\u7528\u7535\u8111\u5c40\u57df\u7f51\u5730\u5740\uff0c\u4f8b\u5982 ' + exampleUrl,
+  }
 }
 
 function getBaseUrlCandidates() {
+  const runtimeConfig = getRequestConfig()
   const app = getAppSafe()
   const globalData = (app && app.globalData) || {}
   const cachedBaseUrl = wx.getStorageSync('docai_api_base_url') || ''
 
-  return uniqueUrls([
+  return filterReachableBaseUrls([
     globalData.activeApiBaseUrl,
     cachedBaseUrl,
     globalData.apiBaseUrl,
-    config.apiBaseUrl,
-  ].concat(config.apiBaseFallbackUrls || []))
+    runtimeConfig.apiBaseUrl,
+  ].concat(runtimeConfig.apiBaseFallbackUrls || []))
 }
 
 function getBaseUrl() {
-  return getBaseUrlCandidates()[0] || normalizeBaseUrl(config.apiBaseUrl)
+  const runtimeConfig = getRequestConfig()
+  return getBaseUrlCandidates()[0] || normalizeBaseUrl(runtimeConfig.apiBaseUrl)
 }
 
 function setActiveBaseUrl(baseUrl) {
@@ -233,6 +308,7 @@ function shouldRetry(err) {
 }
 
 function performRequest(baseUrl, options) {
+  const runtimeConfig = getRequestConfig()
   const method = String(options.method || 'GET').toUpperCase()
   const header = createHeader(options)
 
@@ -242,7 +318,7 @@ function performRequest(baseUrl, options) {
       method,
       data: options.data || {},
       header,
-      timeout: options.timeout || config.requestTimeout,
+      timeout: options.timeout || runtimeConfig.requestTimeout,
       responseType: options.responseType || 'text',
       success(res) {
         const responseData = parseJsonSafely(res.data)
@@ -269,6 +345,10 @@ function performRequest(baseUrl, options) {
 
 async function request(options) {
   const candidates = getBaseUrlCandidates()
+  if (!candidates.length) {
+    throw buildUnavailableBaseUrlError()
+  }
+
   let lastError = null
 
   for (let index = 0; index < candidates.length; index += 1) {
@@ -288,6 +368,7 @@ async function request(options) {
 }
 
 function performUpload(baseUrl, options) {
+  const runtimeConfig = getRequestConfig()
   const header = createHeader(Object.assign({}, options, {
     method: 'UPLOAD',
     skipJsonContentType: true,
@@ -300,7 +381,7 @@ function performUpload(baseUrl, options) {
       name: options.name || 'file',
       formData: options.formData || {},
       header,
-      timeout: options.timeout || config.requestTimeout,
+      timeout: options.timeout || runtimeConfig.requestTimeout,
       success(res) {
         const responseData = parseJsonSafely(res.data)
         const normalized = normalizeResponse(res.statusCode, responseData, 'upload failed', {
@@ -326,6 +407,10 @@ function performUpload(baseUrl, options) {
 
 async function uploadFile(options) {
   const candidates = getBaseUrlCandidates()
+  if (!candidates.length) {
+    throw buildUnavailableBaseUrlError()
+  }
+
   let lastError = null
 
   for (let index = 0; index < candidates.length; index += 1) {
@@ -427,6 +512,23 @@ function extractAiReply(payload) {
   return '请求已完成，但未收到可展示的 AI 文本结果。'
 }
 
+function shouldFlushSseTail(text) {
+  return /(?:^|\n)(?:event|data):/i.test(String(text || ''))
+}
+
+function buildAiChatSuccess(payload, extra) {
+  return {
+    code: 200,
+    message: 'success',
+    data: Object.assign({
+      reply: extractAiReply(payload),
+      modifiedExcelUrl: (payload && payload.result && payload.result.modifiedExcelUrl) || (payload && payload.modifiedExcelUrl) || '',
+      resultData: (payload && payload.result && payload.result.resultData) || (payload && payload.resultData) || [],
+      raw: payload || null,
+    }, extra || {}),
+  }
+}
+
 function shouldRetryAiRequest(err) {
   if (!err) {
     return false
@@ -443,21 +545,33 @@ function shouldRetryAiRequest(err) {
     || message.indexOf('refused') !== -1
 }
 
-function doAiChatRequest(baseUrl, data) {
+function doAiChatRequest(baseUrl, data, options) {
+  const runtimeConfig = getRequestConfig()
   const token = wx.getStorageSync('token') || ''
   const header = {
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
   }
 
-  if (token) {
-    header.Authorization = 'Bearer ' + token
+  const normalizedOptions = Object.assign({
+    onProgress: null,
+  }, options || {})
+
+  if (!token) {
+    return Promise.reject({
+      statusCode: 401,
+      message: 'Login expired, please sign in again.',
+    })
   }
+
+  header.Authorization = 'Bearer ' + token
 
   return new Promise((resolve, reject) => {
     let settled = false
     let requestTask = null
     let buffer = ''
+    let lastProgressPayload = null
+    let lastProgressReply = ''
 
     const finish = (handler, value) => {
       if (settled) {
@@ -482,6 +596,7 @@ function doAiChatRequest(baseUrl, data) {
       }
 
       const payload = event.payload
+      const nextReply = extractAiReply(payload)
       const errorMessage = typeof payload === 'object' && payload !== null
         ? payload.error || payload.message
         : ''
@@ -495,21 +610,31 @@ function doAiChatRequest(baseUrl, data) {
         return
       }
 
-      if (event.eventName === 'complete' || (payload && payload.eventType === 'complete')) {
-        finish(resolve, {
-          code: 200,
-          message: 'success',
-          data: {
-            reply: extractAiReply(payload),
-            modifiedExcelUrl: (payload.result && payload.result.modifiedExcelUrl) || payload.modifiedExcelUrl || '',
-            resultData: (payload.result && payload.result.resultData) || payload.resultData || [],
+      if (event.eventName !== 'complete') {
+        lastProgressPayload = payload
+        if (nextReply) {
+          lastProgressReply = nextReply
+        }
+
+        if (typeof normalizedOptions.onProgress === 'function') {
+          normalizedOptions.onProgress({
+            eventName: event.eventName || '',
+            stage: payload && payload.stage ? payload.stage : '',
+            progress: payload && typeof payload.progress === 'number' ? payload.progress : 0,
+            message: payload && payload.message ? payload.message : '',
+            detail: payload && payload.detail ? payload.detail : '',
+            reply: nextReply,
             raw: payload,
-          },
-        })
+          })
+        }
+      }
+
+      if (event.eventName === 'complete' || (payload && payload.eventType === 'complete')) {
+        finish(resolve, buildAiChatSuccess(payload))
       }
     }
 
-    const consumeText = (text) => {
+    const consumeText = (text, flushTail) => {
       buffer += String(text || '').replace(/\r\n/g, '\n')
 
       let separatorIndex = buffer.indexOf('\n\n')
@@ -523,6 +648,12 @@ function doAiChatRequest(baseUrl, data) {
 
         separatorIndex = buffer.indexOf('\n\n')
       }
+
+      if (flushTail && buffer.trim() && shouldFlushSseTail(buffer)) {
+        const tailBlock = buffer.trim()
+        buffer = ''
+        handleEvent(parseSseBlock(tailBlock))
+      }
     }
 
     requestTask = wx.request({
@@ -533,7 +664,7 @@ function doAiChatRequest(baseUrl, data) {
         userInput: data.message || data.userInput || '',
       },
       header,
-      timeout: config.aiRequestTimeout,
+      timeout: runtimeConfig.aiRequestTimeout,
       responseType: 'arraybuffer',
       enableChunked: true,
       success(res) {
@@ -552,13 +683,23 @@ function doAiChatRequest(baseUrl, data) {
 
         if (res.data) {
           if (typeof res.data === 'string') {
-            consumeText(res.data)
+            consumeText(res.data, true)
           } else {
-            consumeText(arrayBufferToText(res.data))
+            consumeText(arrayBufferToText(res.data), true)
           }
         }
 
         if (!settled) {
+          if (lastProgressPayload || lastProgressReply) {
+            finish(resolve, buildAiChatSuccess(lastProgressPayload || {
+              aiResponseContent: lastProgressReply,
+              eventType: 'progress',
+            }, {
+              incomplete: true,
+            }))
+            return
+          }
+
           finish(reject, {
             statusCode: 0,
             message: 'No complete AI response was received.',
@@ -584,7 +725,7 @@ function doAiChatRequest(baseUrl, data) {
         }
 
         try {
-          consumeText(arrayBufferToText(res.data))
+          consumeText(arrayBufferToText(res.data), false)
         } catch (err) {
           fail({
             statusCode: 0,

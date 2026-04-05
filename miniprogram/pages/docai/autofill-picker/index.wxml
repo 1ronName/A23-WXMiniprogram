@@ -1,0 +1,149 @@
+<view class="doc-page">
+  <view class="page-shell">
+    <view class="hero-card rise-in">
+      <view class="hero-kicker">{{mode === 'source' ? 'Step 1' : 'Step 2'}}</view>
+      <view class="hero-title">{{mode === 'source' ? '选择数据源' : '选择模板'}}</view>
+      <view class="hero-desc" wx:if="{{mode === 'source'}}">
+        这里会统一承接数据源选择与上传。刚上传的文件也会被加入当前草稿，但只有进入“可填表”状态后，执行页才会允许真正开始填表。
+      </view>
+      <view class="hero-desc" wx:else>
+        模板仍然只走 DocAI 当前支持的 Word / Excel 文件。模板先在本地选中，等进入执行页后再统一上传并解析槽位。
+      </view>
+    </view>
+
+    <view wx:if="{{mode === 'source'}}">
+      <view class="panel rise-in">
+        <view class="section-head">
+          <view>
+            <view class="section-title">当前选择</view>
+            <view class="section-subtitle">{{sourceTipText}}</view>
+          </view>
+          <view class="pill">{{selectionSummary.total}} 份已选</view>
+        </view>
+
+        <view class="metric-grid picker-metrics">
+          <view class="metric-card">
+            <view class="metric-value">{{selectionSummary.ready}}</view>
+            <view class="metric-label">已就绪</view>
+            <view class="metric-note">能直接参与本轮智能填表的资料</view>
+          </view>
+          <view class="metric-card">
+            <view class="metric-value">{{selectionSummary.pending}}</view>
+            <view class="metric-label">待处理</view>
+            <view class="metric-note">还在解析或索引中的资料</view>
+          </view>
+          <view class="metric-card">
+            <view class="metric-value">{{selectionSummary.failed}}</view>
+            <view class="metric-label">处理失败</view>
+            <view class="metric-note">可见但不能新加入当前选择</view>
+          </view>
+          <view class="metric-card">
+            <view class="metric-value">{{documents.length}}</view>
+            <view class="metric-label">后台资料数</view>
+            <view class="metric-note">当前账号下 DocAI 返回的来源文档总量</view>
+          </view>
+        </view>
+
+        <view class="picker-toolbar">
+          <button class="solid-btn inline-btn" loading="{{uploading}}" bindtap="uploadSourceFiles">上传新资料</button>
+          <button class="ghost-btn inline-btn" loading="{{loading}}" bindtap="refreshSourceList">刷新状态</button>
+        </view>
+      </view>
+
+      <view class="panel rise-in" wx:if="{{documents.length > 0}}">
+        <view class="section-head">
+          <view>
+            <view class="section-title">数据源列表</view>
+            <view class="section-subtitle">失败资料不会被新加入，处理中资料可以先保留，执行页会继续做最终拦截。</view>
+          </view>
+        </view>
+
+        <view class="picker-doc-list">
+          <view class="picker-doc-card picker-doc-card--{{item.stageTone}}" wx:for="{{documents}}" wx:key="id">
+            <view class="picker-doc-head">
+              <view class="picker-doc-main">
+                <view class="picker-doc-title">{{item.fileName}}</view>
+                <view class="picker-doc-meta">{{item.typeText}} · {{item.stageText}}</view>
+              </view>
+              <view class="picker-doc-stage picker-doc-stage--{{item.stageTone}}">
+                {{item.stageText}}
+              </view>
+            </view>
+            <view class="picker-doc-desc">{{item.stageDesc}}</view>
+            <button
+              class="{{item.selected ? 'warn-btn' : (item.selectDisabled ? 'ghost-btn' : 'solid-btn')}} inline-btn picker-doc-btn"
+              data-id="{{item.id}}"
+              bindtap="toggleSourceSelection"
+            >
+              {{item.actionText}}
+            </button>
+          </view>
+        </view>
+      </view>
+
+      <view class="panel rise-in" wx:else>
+        <view class="empty-state">
+          <view class="empty-title">还没有可选的数据源</view>
+          <view class="empty-desc">先上传 `docx / xlsx / txt / md` 文件，上传后它们会自动进入当前草稿。</view>
+        </view>
+      </view>
+
+      <view class="panel rise-in">
+        <button class="solid-btn picker-bottom-btn" bindtap="continueToTemplate">下一步，选择模板</button>
+      </view>
+    </view>
+
+    <view wx:else>
+      <view class="panel rise-in">
+        <view class="section-head">
+          <view>
+            <view class="section-title">已选数据源</view>
+            <view class="section-subtitle">模板页不再重新选择资料，只承接上一步确认的数据源草稿。</view>
+          </view>
+          <view class="pill">{{sourceCount}} 份资料</view>
+        </view>
+
+        <view class="template-source-preview" wx:if="{{sourceCount > 0}}">
+          <view class="template-source-chip" wx:for="{{sourcePreview}}" wx:key="id">
+            {{item.fileName}}
+          </view>
+          <view class="template-source-more" wx:if="{{sourceCount > 3}}">另有 {{sourceCount - 3}} 份资料未展开</view>
+        </view>
+
+        <view class="empty-state" wx:else>
+          <view class="empty-title">还没有可用的数据源草稿</view>
+          <view class="empty-desc">请先返回数据源步骤，至少选择 1 份资料。</view>
+        </view>
+      </view>
+
+      <view class="panel rise-in">
+        <view class="section-head">
+          <view>
+            <view class="section-title">模板文件</view>
+            <view class="section-subtitle">模板本地选择后，真正的上传和槽位解析会放到执行页完成。</view>
+          </view>
+          <view class="pill">DOCX / XLSX</view>
+        </view>
+
+        <view class="template-card">
+          <view class="template-card-label">当前模板</view>
+          <view class="template-card-value">{{templateName || '暂未选择模板文件'}}</view>
+          <view class="template-card-note">
+            支持 Word 和 Excel 模板。PDF、图片与 schema 模式不在本期原生主流程内。
+          </view>
+          <view class="template-actions">
+            <button class="solid-btn inline-btn" bindtap="chooseTemplateFile">选择模板</button>
+            <button class="ghost-btn inline-btn" wx:if="{{templateName}}" bindtap="clearTemplateFile">清空模板</button>
+          </view>
+        </view>
+      </view>
+
+      <view class="panel rise-in">
+        <view class="picker-toolbar picker-toolbar--spread">
+          <button class="ghost-btn inline-btn" bindtap="goBackToSource">返回上一步</button>
+          <button class="solid-btn inline-btn" bindtap="continueToRun">进入执行页</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

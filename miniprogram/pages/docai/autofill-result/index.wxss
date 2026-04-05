@@ -1,0 +1,120 @@
+.result-metrics {
+  margin-top: 18rpx;
+}
+
+.result-meta-card {
+  margin-top: 18rpx;
+  padding: 22rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+  border: 1rpx solid #e1e9f7;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.result-meta-item {
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #5e6d85;
+}
+
+.result-summary-text {
+  display: block;
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border-radius: 22rpx;
+  background: #f5f8fd;
+  color: #334155;
+  font-size: 25rpx;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.result-actions {
+  margin-top: 18rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.result-actions--stack {
+  flex-direction: column;
+}
+
+.result-action-btn {
+  flex: 1;
+  min-width: calc(50% - 6rpx);
+}
+
+.result-source-list {
+  margin-top: 18rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.result-source-chip {
+  min-height: 48rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  background: #edf3ff;
+  color: #1f58ef;
+  font-size: 22rpx;
+  line-height: 48rpx;
+}
+
+.decision-list {
+  margin-top: 18rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.decision-card {
+  padding: 22rpx;
+  border-radius: 22rpx;
+  background: #f8fbff;
+  border: 1rpx solid #dee6f4;
+}
+
+.decision-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.decision-title {
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: #1c2942;
+  font-weight: 700;
+}
+
+.decision-confidence {
+  min-height: 44rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  background: #e6f4ea;
+  color: #23734b;
+  font-size: 22rpx;
+  line-height: 44rpx;
+  white-space: nowrap;
+}
+
+.decision-value {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #314056;
+  word-break: break-word;
+}
+
+.decision-reason {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: #6b7a92;
+}

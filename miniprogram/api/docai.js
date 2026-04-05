@@ -11,6 +11,12 @@ const {
   rememberDocumentName,
   resolveDocumentName,
 } = require('../utils/document-name')
+const {
+  decorateDocumentsWithStage,
+  decorateDocumentWithStage,
+  markDocumentsUploaded,
+  clearDocumentStage,
+} = require('../utils/document-stage')
 
 function normalizeUser(item) {
   if (!item) {
@@ -161,7 +167,7 @@ function shouldRetryAiRequest(err) {
     || message.indexOf('refused') !== -1
 }
 
-function doAiChatRequest(baseUrl, data) {
+function doAiChatRequest(baseUrl, data, options) {
   const token = wx.getStorageSync('token') || ''
   const header = {
     'Content-Type': 'application/json',
@@ -176,6 +182,7 @@ function doAiChatRequest(baseUrl, data) {
     let settled = false
     let requestTask = null
     let buffer = ''
+    let lastProgressPayload = null
 
     const finish = (handler, value) => {
       if (settled) {
@@ -194,17 +201,41 @@ function doAiChatRequest(baseUrl, data) {
       finish(reject, error)
     }
 
+    const buildAiSuccessPayload = (payload) => ({
+      reply: extractAiReply(payload),
+      modifiedExcelUrl: (payload && payload.result && payload.result.modifiedExcelUrl) || (payload && payload.modifiedExcelUrl) || '',
+      resultData: (payload && payload.result && payload.result.resultData) || (payload && payload.resultData) || [],
+      raw: payload || null,
+    })
+
+    const emitProgress = (payload) => {
+      if (!options || typeof options.onProgress !== 'function') {
+        return
+      }
+
+      try {
+        options.onProgress(Object.assign({
+          eventType: 'progress',
+        }, typeof payload === 'object' && payload !== null ? payload : {
+          reply: extractAiReply(payload),
+        }))
+      } catch (err) {
+        // keep the main request flow stable even if the progress handler throws
+      }
+    }
+
     const handleEvent = (event) => {
       if (!event) {
         return
       }
 
       const payload = event.payload
+      const payloadEventType = payload && payload.eventType
       const errorMessage = typeof payload === 'object' && payload !== null
-        ? payload.error || payload.message
+        ? payload.error || (payloadEventType === 'error' ? payload.message : '')
         : ''
 
-      if (event.eventName === 'error' || errorMessage) {
+      if (event.eventName === 'error' || payloadEventType === 'error' || errorMessage) {
         fail({
           statusCode: 0,
           data: payload,
@@ -213,13 +244,14 @@ function doAiChatRequest(baseUrl, data) {
         return
       }
 
-      if (event.eventName === 'complete' || (payload && payload.eventType === 'complete')) {
-        finish(resolve, buildSuccess({
-          reply: extractAiReply(payload),
-          modifiedExcelUrl: (payload.result && payload.result.modifiedExcelUrl) || payload.modifiedExcelUrl || '',
-          resultData: (payload.result && payload.result.resultData) || payload.resultData || [],
-          raw: payload,
-        }))
+      if (event.eventName === 'progress' || payloadEventType === 'progress') {
+        lastProgressPayload = payload
+        emitProgress(payload)
+        return
+      }
+
+      if (event.eventName === 'complete' || payloadEventType === 'complete') {
+        finish(resolve, buildSuccess(buildAiSuccessPayload(payload || lastProgressPayload)))
       }
     }
 
@@ -270,6 +302,17 @@ function doAiChatRequest(baseUrl, data) {
           } else {
             consumeText(arrayBufferToText(res.data))
           }
+        }
+
+        const trailingBlock = buffer.trim()
+        if (!settled && trailingBlock) {
+          buffer = ''
+          handleEvent(parseSseBlock(trailingBlock))
+        }
+
+        if (!settled && lastProgressPayload) {
+          finish(resolve, buildSuccess(buildAiSuccessPayload(lastProgressPayload)))
+          return
         }
 
         if (!settled) {
@@ -364,7 +407,7 @@ function getSourceDocuments() {
     url: '/source/documents',
   }).then(function (res) {
     return Object.assign({}, res, {
-      data: (res.data || []).map(normalizeDocument),
+      data: decorateDocumentsWithStage((res.data || []).map(normalizeDocument)),
     })
   })
 }
@@ -376,13 +419,17 @@ function getDocuments() {
 function getDocument(id) {
   return request({ url: '/source/' + id }).then(function (res) {
     return Object.assign({}, res, {
-      data: normalizeDocument(res.data),
+      data: decorateDocumentWithStage(normalizeDocument(res.data)),
     })
   })
 }
 
 function getDocumentStatuses() {
-  return request({ url: '/source/documents/status' })
+  return request({ url: '/source/documents/status' }).then(function (res) {
+    return Object.assign({}, res, {
+      data: decorateDocumentsWithStage((res.data || []).map(normalizeDocument)),
+    })
+  })
 }
 
 function getDocumentFields(id) {
@@ -414,17 +461,24 @@ function uploadDocument(filePath, fileName) {
       rememberDocumentName(payload.id, normalizedFileName)
     }
 
+    if (payload.id || payload.id === 0) {
+      markDocumentsUploaded(payload.id)
+    }
+
     if (res && res.data) {
       return Object.assign({}, res, {
-        data: normalizeDocument(res.data),
+        data: decorateDocumentWithStage(normalizeDocument(res.data)),
       })
     }
-    return normalizeDocument(res)
+    return decorateDocumentWithStage(normalizeDocument(res))
   })
 }
 
 function deleteDocument(id) {
-  return request({ url: '/source/' + id, method: 'DELETE' })
+  return request({ url: '/source/' + id, method: 'DELETE' }).then(function (res) {
+    clearDocumentStage(id)
+    return res
+  })
 }
 
 function batchDeleteDocuments(docIds) {
@@ -434,14 +488,27 @@ function batchDeleteDocuments(docIds) {
     data: {
       docIds: docIds || [],
     },
+  }).then(function (res) {
+    ;(docIds || []).forEach(function (docId) {
+      clearDocumentStage(docId)
+    })
+    return res
   })
 }
 
-function uploadTemplateFile(filePath) {
+function uploadTemplateFile(filePath, fileName) {
+  const normalizedFileName = normalizeFileName(fileName)
+
   return uploadFile({
     url: '/template/upload',
     filePath: filePath,
     name: 'file',
+    formData: normalizedFileName
+      ? {
+        fileName: normalizedFileName,
+        originalFileName: normalizedFileName,
+      }
+      : {},
     timeout: config.aiRequestTimeout,
   })
 }
@@ -467,6 +534,16 @@ function fillTemplate(templateId, docIds, userRequirement) {
   })
 }
 
+function buildTemplateResultDownloadUrl(templateId) {
+  if (!templateId && templateId !== 0) {
+    return ''
+  }
+
+  const candidates = getBaseUrlCandidates()
+  const baseUrl = candidates[0] || config.apiBaseUrl
+  return normalizeUrl('/template/' + templateId + '/download', baseUrl)
+}
+
 function listTemplateFiles() {
   return request({ url: '/template/list' })
 }
@@ -479,7 +556,7 @@ function getTemplateDecisions(templateId) {
   return request({ url: '/template/' + templateId + '/decisions' })
 }
 
-async function aiChat(data) {
+async function aiChat(data, options) {
   const candidates = getBaseUrlCandidates()
   let lastError = null
 
@@ -487,7 +564,7 @@ async function aiChat(data) {
     const baseUrl = candidates[index]
 
     try {
-      return await doAiChatRequest(baseUrl, data || {})
+      return await doAiChatRequest(baseUrl, data || {}, options)
     } catch (err) {
       lastError = err
       if (index === candidates.length - 1 || !shouldRetryAiRequest(err)) {
@@ -559,6 +636,7 @@ module.exports = {
   uploadTemplateFile,
   parseTemplateSlots,
   fillTemplate,
+  buildTemplateResultDownloadUrl,
   listTemplateFiles,
   getTemplateAudit,
   getTemplateDecisions,

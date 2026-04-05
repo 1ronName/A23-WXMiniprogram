@@ -1,0 +1,124 @@
+<view class="doc-page">
+  <view class="page-shell">
+    <view class="hero-card rise-in">
+      <view class="hero-kicker">Step 4</view>
+      <view class="hero-title">填表结果</view>
+      <view class="hero-desc">
+        原生执行页完成后，结果会先沉淀到这里。你可以直接下载、保存、转发，并且同一份结果已经同步写入文档页的“成表”区域。
+      </view>
+    </view>
+
+    <view class="panel rise-in" wx:if="{{missingResult}}">
+      <view class="empty-state">
+        <view class="empty-title">暂时没有可展示的结果</view>
+        <view class="empty-desc">请先完成一次原生智能填表，或者返回文档页查看已经沉淀的“成表”记录。</view>
+      </view>
+      <view class="result-actions result-actions--stack">
+        <button class="solid-btn inline-btn" bindtap="restartAutofill">返回智能填表入口</button>
+        <button class="ghost-btn inline-btn" bindtap="goDocuments">去文档页查看成表</button>
+      </view>
+    </view>
+
+    <view wx:elif="{{result}}">
+      <view class="panel rise-in">
+        <view class="section-head">
+          <view>
+            <view class="section-title">结果摘要</view>
+            <view class="section-subtitle">这份结果已经属于当前小程序的“成表”记录，可在文档页继续下载和转发。</view>
+          </view>
+          <view class="pill">{{result.createdAtText}}</view>
+        </view>
+
+        <view class="metric-grid result-metrics">
+          <view class="metric-card">
+            <view class="metric-value">{{result.filledCount}}</view>
+            <view class="metric-label">已填字段</view>
+            <view class="metric-note">本次自动完成的字段数量</view>
+          </view>
+          <view class="metric-card">
+            <view class="metric-value">{{result.blankCount}}</view>
+            <view class="metric-label">待补字段</view>
+            <view class="metric-note">仍需人工确认或补充的字段数量</view>
+          </view>
+          <view class="metric-card">
+            <view class="metric-value">{{result.totalSlots}}</view>
+            <view class="metric-label">模板字段总数</view>
+            <view class="metric-note">本轮模板解析出的总字段数</view>
+          </view>
+          <view class="metric-card">
+            <view class="metric-value">{{result.fillTimeMs}}ms</view>
+            <view class="metric-label">处理耗时</view>
+            <view class="metric-note">上传模板后到完成结果整理的总耗时</view>
+          </view>
+        </view>
+
+        <view class="result-meta-card">
+          <view class="result-meta-item">模板名称：{{result.templateName}}</view>
+          <view class="result-meta-item">结果文件：{{result.outputName}}</view>
+          <view class="result-meta-item" wx:if="{{result.auditId}}">审计编号：{{result.auditId}}</view>
+          <view class="result-meta-item" wx:if="{{result.fileSizeText}}">模板大小：{{result.fileSizeText}}</view>
+          <view class="result-meta-item">数据源数量：{{result.sourceCount}}</view>
+        </view>
+
+        <view class="result-summary-text">{{result.summaryText}}</view>
+      </view>
+
+      <view class="panel rise-in">
+        <view class="section-head">
+          <view>
+            <view class="section-title">下载与转发</view>
+            <view class="section-subtitle">下载仍然走 DocAI 现有的 `/template/{templateId}/download`，不会改动后端结果文件。</view>
+          </view>
+        </view>
+
+        <view class="result-actions">
+          <button class="solid-btn inline-btn result-action-btn" loading="{{downloading}}" bindtap="handleDownloadOpen">下载并打开</button>
+          <button class="ghost-btn inline-btn result-action-btn" loading="{{downloading}}" bindtap="handleDownloadSave">仅下载到本地</button>
+          <button class="outline-btn inline-btn result-action-btn" loading="{{sharing}}" bindtap="handleShare">转发结果</button>
+        </view>
+      </view>
+
+      <view class="panel rise-in" wx:if="{{result.sourceDocs.length > 0}}">
+        <view class="section-head">
+          <view>
+            <view class="section-title">本次使用的数据源</view>
+            <view class="section-subtitle">这里只展示本轮原生流程真正参与填表的资料，不会混入网页端状态。</view>
+          </view>
+        </view>
+
+        <view class="result-source-list">
+          <view class="result-source-chip" wx:for="{{result.sourceDocs}}" wx:key="id">
+            {{item.fileName}}
+          </view>
+        </view>
+      </view>
+
+      <view class="panel rise-in" wx:if="{{decisionPreview.length > 0}}">
+        <view class="section-head">
+          <view>
+            <view class="section-title">决策记录预览</view>
+            <view class="section-subtitle">这里只展示前 8 条，完整结果仍以下载文件和 DocAI 后端记录为准。</view>
+          </view>
+        </view>
+
+        <view class="decision-list">
+          <view class="decision-card" wx:for="{{decisionPreview}}" wx:key="fieldName">
+            <view class="decision-head">
+              <view class="decision-title">{{item.fieldName}}</view>
+              <view class="decision-confidence">{{item.confidenceText}}</view>
+            </view>
+            <view class="decision-value">{{item.finalValue || '无匹配结果'}}</view>
+            <view class="decision-reason" wx:if="{{item.reason}}">{{item.reason}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="panel rise-in">
+        <view class="result-actions result-actions--stack">
+          <button class="solid-btn inline-btn" bindtap="goDocuments">去文档页查看成表</button>
+          <button class="ghost-btn inline-btn" bindtap="restartAutofill">继续新一轮填表</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

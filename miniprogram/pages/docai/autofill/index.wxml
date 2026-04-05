@@ -1,112 +1,230 @@
 <view class="doc-page">
   <view class="page-shell">
-    <view class="hero-card rise-in">
-      <view class="hero-kicker">Auto Fill</view>
+    <view class="hero-card rise-in autofill-hero-card">
+      <view class="hero-kicker">智能表单助手</view>
       <view class="hero-title">智能填表</view>
       <view class="hero-desc">
-        模板选择、已解析来源文档数量和填表结果放在同一条链路里，更贴近报名表、汇总表和申报材料的真实使用场景。
+        把数据源、模板、需求和结果都收在这一页里。顶部只保留标题说明，实际操作放到下方各自的功能板块，页面会更轻、更清楚。
       </view>
-      <view class="hero-actions">
-        <button class="solid-btn inline-btn" bindtap="chooseTemplate">选择模板</button>
-        <button class="outline-btn inline-btn autofill-hero-outline" loading="{{loading}}" bindtap="startFill">开始填充</button>
-      </view>
-    </view>
-
-    <view class="panel rise-in">
-      <view class="section-head">
-        <view>
-          <view class="section-title">操作步骤</view>
-          <view class="section-subtitle">尽量把用户常问的“先做什么、结果在哪里看”直接说明白。</view>
-        </view>
-      </view>
-
-      <view class="info-list">
-        <view class="info-row">
-          <view class="info-index">1</view>
-          <view class="info-content">
-            <view class="info-title">选择一个模板文件</view>
-            <view class="info-desc">目前支持 Word 和 Excel 模板，建议先准备结构清晰的示例模板。</view>
-          </view>
-        </view>
-        <view class="info-row">
-          <view class="info-index">2</view>
-          <view class="info-content">
-            <view class="info-title">系统读取已解析来源文档</view>
-            <view class="info-desc">会从当前账号已解析完成的文档中选择最多 10 份作为填表数据来源。</view>
-          </view>
-        </view>
-        <view class="info-row">
-          <view class="info-index">3</view>
-          <view class="info-content">
-            <view class="info-title">返回真实填表摘要</view>
-            <view class="info-desc">你可以直接查看填表统计、审计编号和结果文件信息，适合联调验证和演示讲解。</view>
-          </view>
-        </view>
+      <view class="hero-meta-row">
+        <view class="hero-meta-pill">数据源支持从文档页预先选择</view>
+        <view class="hero-meta-pill hero-meta-pill--soft">结果完成后会自动进入成表区</view>
       </view>
     </view>
 
     <view class="panel rise-in">
       <view class="section-head">
         <view>
-          <view class="section-title">模板与数据源</view>
-          <view class="section-subtitle">模板状态和可参与填表的已解析文档集中展示，减少页面间来回跳转。</view>
+          <view class="section-title">数据源选择</view>
+          <view class="section-subtitle">这一块只保留上传和已选数据源管理。你也可以先去文档页选择资料，返回后会自动同步到这里。</view>
         </view>
-        <view class="pill">{{sourceDocCount}} 份已解析文档</view>
+        <view class="pill">已选 {{selectionSummary.total}} 份</view>
       </view>
 
-      <view class="autofill-status-grid">
-        <view class="autofill-status-card">
-          <view class="autofill-status-label">已选模板</view>
-          <view class="autofill-status-value">{{templateName || '暂未选择模板文件'}}</view>
+      <view class="source-toolbar">
+        <view class="source-toolbar-actions">
+          <button class="solid-btn inline-btn source-upload-btn" loading="{{uploadingSources}}" bindtap="uploadSourceFiles">上传数据源</button>
+          <button class="ghost-btn inline-btn source-picker-btn" bindtap="openSourcePicker">从文档库选择</button>
         </view>
-        <view class="autofill-status-card">
-          <view class="autofill-status-label">当前状态</view>
-          <view class="autofill-status-value">{{templateStatusText}}</view>
+        <view class="source-count-card">
+          <view class="source-count-value">{{sourceSummary.total}}</view>
+          <view class="source-count-label">已上传文档</view>
+          <view class="source-count-note">其中 {{sourceSummary.ready}} 份已就绪，可直接用于当前填表。</view>
         </view>
       </view>
 
-      <view class="autofill-note">
-        提示：建议先在文档中心上传好测试资料并等待解析完成，再回来执行智能填表，这样结果会更稳定。
+      <view class="selected-list">
+        <view class="selected-title">本次填表数据源</view>
+
+        <view wx:if="{{selectedSourceDocs.length > 0}}" class="selected-source-list">
+          <view class="selected-source-card" wx:for="{{selectedSourceDocs}}" wx:key="id">
+            <view class="selected-source-main">
+              <view class="selected-source-name">{{item.fileName}}</view>
+              <view class="selected-source-meta">{{item.typeText}} · {{item.stageText}}</view>
+            </view>
+            <view class="selected-source-side">
+              <view class="selected-source-stage selected-source-stage--{{item.stageTone}}">{{item.stageText}}</view>
+              <text class="selected-source-remove" data-id="{{item.id}}" bindtap="removeSelectedSource">移除</text>
+            </view>
+          </view>
+        </view>
+
+        <view wx:else class="empty-state source-empty-state">
+          <view class="empty-title">还没有加入本次填表的数据源</view>
+          <view class="empty-desc">可以在当前页上传 `docx / xlsx / txt / md` 文件，也可以先到文档页选择资料后再返回这里。</view>
+        </view>
       </view>
     </view>
 
-    <view class="panel rise-in" wx:if="{{resultReady}}">
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">模板与填表需求</view>
+          <view class="section-subtitle">模板选择和执行也都收在同一页，结果会直接回到当前页面。</view>
+        </view>
+        <view class="pill">DOCX / XLSX</view>
+      </view>
+
+      <view class="template-card">
+        <view class="template-card-label">当前模板</view>
+        <view class="template-card-value">{{templateName || '暂未选择模板文件'}}</view>
+        <view class="template-card-note">模板会按原始文件名上传，生成结果时保留可读文件名。</view>
+        <view class="template-actions">
+          <button class="solid-btn inline-btn" bindtap="chooseTemplateFile">选择模板</button>
+          <button class="ghost-btn inline-btn" wx:if="{{templateName}}" bindtap="clearTemplateFile">清空模板</button>
+        </view>
+      </view>
+
+      <view class="run-textarea-card">
+        <view class="template-card-label">我的需求</view>
+        <textarea
+          class="run-textarea"
+          maxlength="500"
+          placeholder="可选：补充你的填表要求，例如“保留原始日期格式”“没有命中的字段留空”。"
+          value="{{userRequirement}}"
+          bindinput="handleRequirementInput"
+        />
+        <view class="run-textarea-count">{{userRequirement.length}} / 500</view>
+      </view>
+    </view>
+
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">执行状态</view>
+          <view class="section-subtitle">{{executionBlockedText}}</view>
+        </view>
+      </view>
+
+      <view class="run-progress-list">
+        <view class="run-progress-item {{index < currentProgressStep ? 'run-progress-item--done' : ''}} {{index === currentProgressStep ? 'run-progress-item--active' : ''}}" wx:for="{{progressSteps}}" wx:key="*this">
+          <view class="run-progress-dot"></view>
+          <view class="run-progress-text">{{item}}</view>
+        </view>
+      </view>
+
+      <view class="run-progress-note" wx:if="{{progressText}}">{{progressText}}</view>
+      <view class="run-error-note" wx:if="{{errorText}}">{{errorText}}</view>
+
+      <button
+        class="solid-btn run-submit-btn"
+        loading="{{submitting}}"
+        disabled="{{selectionSummary.total === 0 || selectionSummary.pending > 0 || selectionSummary.failed > 0 || !templateLocalPath}}"
+        bindtap="startAutofill"
+      >
+        开始智能填表
+      </button>
+    </view>
+
+    <view class="panel rise-in" wx:if="{{resultReady && result}}">
       <view class="section-head">
         <view>
           <view class="section-title">填表结果</view>
-          <view class="section-subtitle">返回的是适合移动端查看的填表摘要，不会把复杂信息挤在一行里。</view>
+          <view class="section-subtitle">结果已同步写入文档页“成表”，你也可以直接在当前页下载或转发。</view>
         </view>
+        <view class="pill">{{result.createdAtText}}</view>
       </view>
 
       <view class="metric-grid autofill-metrics">
         <view class="metric-card">
-          <view class="metric-value">{{resultMeta.filledCount}}</view>
+          <view class="metric-value">{{result.filledCount}}</view>
           <view class="metric-label">已填字段</view>
-          <view class="metric-note">成功匹配并回填的字段数量</view>
+          <view class="metric-note">本次成功自动完成的字段数量</view>
         </view>
         <view class="metric-card">
-          <view class="metric-value">{{resultMeta.blankCount}}</view>
+          <view class="metric-value">{{result.blankCount}}</view>
           <view class="metric-label">待补字段</view>
           <view class="metric-note">仍需人工确认或补充的字段数量</view>
         </view>
         <view class="metric-card">
-          <view class="metric-value">{{resultMeta.totalSlots}}</view>
-          <view class="metric-label">总字段数</view>
-          <view class="metric-note">本次模板识别出的字段总数</view>
+          <view class="metric-value">{{result.totalSlots}}</view>
+          <view class="metric-label">模板字段总数</view>
+          <view class="metric-note">当前模板解析出的总字段数</view>
         </view>
         <view class="metric-card">
-          <view class="metric-value">{{resultMeta.fillTimeMs}}ms</view>
+          <view class="metric-value">{{result.fillTimeMs}}ms</view>
           <view class="metric-label">处理耗时</view>
-          <view class="metric-note">结果返回时记录的服务端处理耗时</view>
+          <view class="metric-note">上传模板后到生成结果的总耗时</view>
         </view>
       </view>
 
-      <view class="autofill-result-meta">
-        <view class="autofill-result-item">模板名称：{{resultMeta.templateName || templateName || '未返回'}}</view>
-        <view class="autofill-result-item">模板文件大小：{{resultMeta.fileSizeText}}</view>
+      <view class="result-meta-card">
+        <view class="result-meta-item">模板名称：{{result.templateName}}</view>
+        <view class="result-meta-item">结果文件：{{result.outputName}}</view>
+        <view class="result-meta-item" wx:if="{{result.auditId}}">审计编号：{{result.auditId}}</view>
+        <view class="result-meta-item" wx:if="{{result.fileSizeText}}">模板大小：{{result.fileSizeText}}</view>
+        <view class="result-meta-item">数据源数量：{{result.sourceCount}}</view>
       </view>
 
-      <text class="autofill-result-text">{{resultText}}</text>
+      <view class="result-actions">
+        <button class="solid-btn inline-btn result-action-btn" loading="{{downloadingResult}}" bindtap="handleDownloadOpen">下载并打开</button>
+        <button class="ghost-btn inline-btn result-action-btn" loading="{{downloadingResult}}" bindtap="handleDownloadSave">仅下载到本地</button>
+        <button class="outline-btn inline-btn result-action-btn" loading="{{sharingResult}}" bindtap="handleShareResult">转发结果</button>
+      </view>
+
+      <text class="autofill-result-text">{{result.summaryText}}</text>
+
+      <view class="result-source-list" wx:if="{{result.sourceDocs.length > 0}}">
+        <view class="result-source-chip" wx:for="{{result.sourceDocs}}" wx:key="id">{{item.fileName}}</view>
+      </view>
+    </view>
+
+    <view class="panel rise-in" wx:if="{{decisionPreview.length > 0}}">
+      <view class="section-head">
+        <view>
+          <view class="section-title">决策记录预览</view>
+          <view class="section-subtitle">这里展示前几条决策记录，帮助你快速确认填表结果。</view>
+        </view>
+      </view>
+
+      <view class="decision-list">
+        <view class="decision-card" wx:for="{{decisionPreview}}" wx:key="fieldName">
+          <view class="decision-head">
+            <view class="decision-title">{{item.fieldName}}</view>
+            <view class="decision-confidence">{{item.confidenceText}}</view>
+          </view>
+          <view class="decision-value">{{item.finalValue || '无匹配结果'}}</view>
+          <view class="decision-reason" wx:if="{{item.reason}}">{{item.reason}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="panel rise-in">
+      <view class="section-head">
+        <view>
+          <view class="section-title">四段状态说明</view>
+          <view class="section-subtitle">前端仍保持“上传成功 / 解析中 / 建索引中 / 可填表”的状态提示，便于在单页内判断资料是否可用。</view>
+        </view>
+      </view>
+
+      <view class="stage-list">
+        <view class="stage-card stage-card--{{item.tone}}" wx:for="{{stageItems}}" wx:key="key">
+          <view class="stage-card-head">
+            <view class="stage-dot"></view>
+            <view class="stage-title">{{item.title}}</view>
+          </view>
+          <view class="stage-desc">{{item.desc}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="panel rise-in" wx:if="{{remoteWebSupported}}">
+      <view class="section-head">
+        <view>
+          <view class="section-title">网页辅助模式</view>
+          <view class="section-subtitle">如果需要，也可以继续从当前页打开网站版智能填表。</view>
+        </view>
+        <view class="pill">web-view</view>
+      </view>
+
+      <view class="autofill-web-card">
+        <view class="autofill-web-label">网页入口域名</view>
+        <view class="autofill-web-value">{{remoteWebHost}}</view>
+        <view class="autofill-web-note">
+          网页模式仍然不会自动继承小程序登录态，也不会把网页内的操作结果实时回传到当前单页原生流程。
+        </view>
+        <button class="outline-btn inline-btn autofill-web-btn" bindtap="openWebAutofill">打开网页辅助模式</button>
+      </view>
     </view>
   </view>
 </view>

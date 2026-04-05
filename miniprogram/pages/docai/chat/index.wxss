@@ -591,6 +591,10 @@ page {
   background: transparent;
 }
 
+.composer-bar__input[disabled] {
+  color: #9aa7c1;
+}
+
 .composer-bar__placeholder {
   color: #aeb8ca;
 }
@@ -830,6 +834,10 @@ page {
   border-bottom: 1rpx solid rgba(110, 127, 171, 0.08);
 }
 
+.document-item--disabled {
+  opacity: 0.72;
+}
+
 .document-item--active {
   margin-bottom: 8rpx;
   padding: 18rpx 16rpx;
@@ -855,6 +863,41 @@ page {
   margin-top: 8rpx;
   font-size: 22rpx;
   color: #8792a8;
+}
+
+.document-item__stage {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10rpx;
+  padding: 0 14rpx;
+  min-height: 40rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  line-height: 40rpx;
+  background: rgba(128, 140, 170, 0.1);
+  color: #6f7c97;
+}
+
+.document-item__stage--success {
+  background: rgba(51, 193, 109, 0.12);
+  color: #1f9a53;
+}
+
+.document-item__stage--warning {
+  background: rgba(255, 187, 103, 0.14);
+  color: #c67a17;
+}
+
+.document-item__stage--danger {
+  background: rgba(255, 138, 117, 0.12);
+  color: #d3563a;
+}
+
+.document-item__desc {
+  margin-top: 8rpx;
+  font-size: 21rpx;
+  line-height: 1.5;
+  color: #8a96ac;
 }
 
 .document-item__tag {
