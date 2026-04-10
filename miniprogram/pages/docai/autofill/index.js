@@ -1,6 +1,18 @@
-const api = require('../../../api/docai')
+﻿const api = require('../../../api/docai')
 const config = require('../../../config')
 const { ensureLogin } = require('../../../utils/auth')
+const {
+  chooseMessageFileAsync,
+  getPickerErrorMessage,
+  getUploadPickerHint,
+  isPickerCancelError,
+  resolvePickedFileName,
+  resolvePickedFilePath,
+} = require('../../../utils/message-file-picker')
+const {
+  selectLocalFiles,
+  uploadSelectedFiles,
+} = require('../../../utils/upload-workflow')
 const {
   loadAutofillDraft,
   updateAutofillDraft,
@@ -14,12 +26,23 @@ const {
   rememberAutofillResult,
   updateAutofillResult,
 } = require('../../../utils/autofill-result')
+const {
+  AUTOFILL_SOURCE_UPLOAD_POLICY,
+  AUTOFILL_TEMPLATE_UPLOAD_POLICY,
+  buildPolicyRules,
+} = require('../../../utils/upload-policy')
 
 const WEB_AUTOFILL_NOTICE_KEY = 'docai_autofill_web_notice_ack'
 const DOCUMENT_PICKER_CONTEXT_KEY = 'docai_autofill_document_picker_context'
 const SOURCE_EXTENSIONS = ['docx', 'xlsx', 'txt', 'md']
 const TEMPLATE_EXTENSIONS = ['docx', 'xlsx']
 const SOURCE_POLL_INTERVAL = 4000
+const SOURCE_UPLOAD_RULES = buildPolicyRules(AUTOFILL_SOURCE_UPLOAD_POLICY, {
+  retryText: '上传失败后可重新选择后再次上传。',
+})
+const TEMPLATE_UPLOAD_RULES = buildPolicyRules(AUTOFILL_TEMPLATE_UPLOAD_POLICY, {
+  retryText: '每次只保留 1 份模板，重新选择会覆盖当前模板。',
+})
 
 function normalizeBaseUrl(url) {
   return String(url || '').trim().replace(/\/+$/, '')
@@ -35,11 +58,15 @@ function toNumber(value) {
 }
 
 function getRemoteWebBaseUrl() {
-  return normalizeBaseUrl(config && config.remoteWebBaseUrl)
+  return normalizeBaseUrl(config && (
+    config.remoteWebBaseUrl
+    || config.webviewUrl
+    || config.WEBVIEW_URL
+  ))
 }
 
 function canUseRemoteWebAutofill() {
-  return /^https:\/\//i.test(getRemoteWebBaseUrl())
+  return Boolean(config && config.enableWebviewAssist) && /^https:\/\//i.test(getRemoteWebBaseUrl())
 }
 
 function getQuestionStageKey(item) {
@@ -238,6 +265,37 @@ function trimErrorMessage(message, fallbackMessage) {
   return text || fallbackMessage
 }
 
+function buildCurrentTemplate(templateName, templateLocalPath) {
+  const fileName = normalizeText(templateName)
+  const localPath = normalizeText(templateLocalPath)
+  if (!fileName && !localPath) {
+    return null
+  }
+
+  const resolvedName = fileName || '未命名模板'
+  const fileType = normalizeText(getFileTypeFromName(resolvedName || localPath)).toLowerCase()
+  return {
+    id: '',
+    fileName: resolvedName,
+    localPath,
+    fileType,
+    typeText: String(fileType || 'file').toUpperCase(),
+    stageTone: 'success',
+    stageText: '待上传',
+    sourceText: localPath ? '来自微信文件选择' : '待上传模板',
+  }
+}
+
+function getDefaultPrivacyDialog() {
+  return {
+    visible: false,
+    scene: 'general',
+    sceneText: '继续当前操作',
+    referrer: '',
+    agreeButtonId: 'docai-privacy-agree-btn',
+  }
+}
+
 Page({
   data: {
     loadingSources: false,
@@ -253,9 +311,16 @@ Page({
     selectedDocIds: [],
     selectedSourceDocs: [],
     selectionSummary: { total: 0, ready: 0, pending: 0, failed: 0 },
+    sourceUploadRules: SOURCE_UPLOAD_RULES,
+    templateUploadRules: TEMPLATE_UPLOAD_RULES,
+    uploadQueueRole: '',
+    uploadProgressText: '',
+    uploadErrorText: '',
+    currentTemplate: null,
     templateName: '',
     templateLocalPath: '',
     userRequirement: '',
+    requirementText: '',
     executionBlockedText: '请先选择至少 1 份数据源资料，再开始智能填表。',
     progressSteps: ['校验来源资料', '上传模板文件', '解析模板槽位', '执行智能填表'],
     currentProgressStep: -1,
@@ -264,12 +329,22 @@ Page({
     resultReady: false,
     result: null,
     decisionPreview: [],
+    uploadPickerHint: getUploadPickerHint(),
+    privacyDialog: getDefaultPrivacyDialog(),
     stageItems: [
       { key: 'uploaded', title: '文件上传成功', desc: '资料已进入 DocAI，等待后台接管解析任务。', tone: 'plain' },
       { key: 'parsing', title: '文档解析中', desc: 'DocAI 正在提取正文与字段信息，这时先不要直接填表。', tone: 'warning' },
       { key: 'indexing', title: '建立知识索引中', desc: '内容已被读取，系统正在准备更稳定的检索与字段匹配。', tone: 'info' },
       { key: 'ready', title: '可填表', desc: '只有进入这一阶段，当前页面才会允许真正开始智能填表。', tone: 'success' },
     ],
+  },
+
+  onLoad() {
+    this.lastSourceRetryFiles = []
+    const app = getApp()
+    if (app && app.bindPrivacyDialog) {
+      app.bindPrivacyDialog(this)
+    }
   },
 
   onShow() {
@@ -287,6 +362,10 @@ Page({
 
   onUnload() {
     this.clearSourcePolling()
+    const app = getApp()
+    if (app && app.unbindPrivacyDialog) {
+      app.unbindPrivacyDialog(this)
+    }
   },
 
   syncLocalState() {
@@ -298,19 +377,58 @@ Page({
       templateName: draft.templateName || '',
       templateLocalPath: draft.templateLocalPath || '',
       userRequirement: draft.userRequirement || '',
+      requirementText: draft.userRequirement || '',
+      currentTemplate: buildCurrentTemplate(draft.templateName || '', draft.templateLocalPath || ''),
       resultReady: Boolean(result),
       result,
       decisionPreview: result ? (result.decisions || []).slice(0, 8) : [],
     })
   },
 
-  chooseMessageFileAsync(options) {
-    return new Promise((resolve, reject) => {
-      wx.chooseMessageFile(Object.assign({}, options, {
-        success: resolve,
-        fail: reject,
-      }))
+  openPrivacyPolicy() {
+    const app = getApp()
+    if (app && app.openPrivacyContract) {
+      app.openPrivacyContract()
+      return
+    }
+
+    wx.navigateTo({
+      url: '/pages/legal/privacy-policy/index',
     })
+  },
+
+  openUserAgreement() {
+    const app = getApp()
+    if (app && app.openUserAgreement) {
+      app.openUserAgreement()
+      return
+    }
+
+    wx.navigateTo({
+      url: '/pages/legal/user-agreement/index',
+    })
+  },
+
+  handlePrivacyAgree(e) {
+    const app = getApp()
+    if (app && app.handlePrivacyAgree) {
+      app.handlePrivacyAgree(e)
+    }
+  },
+
+  handlePrivacyDisagree() {
+    const app = getApp()
+    if (app && app.handlePrivacyDisagree) {
+      app.handlePrivacyDisagree()
+    }
+  },
+
+  ensurePrivacyAuthorized(scene, action) {
+    const app = getApp()
+    if (app && typeof app.ensurePrivacyAuthorized === 'function') {
+      return app.ensurePrivacyAuthorized(scene, action)
+    }
+    return typeof action === 'function' ? action() : Promise.resolve()
   },
 
   downloadFileAsync(options) {
@@ -534,50 +652,217 @@ Page({
     this.goDocuments()
   },
 
+  syncUploadFeedback(role, progressText, errorText) {
+    this.setData({
+      uploadQueueRole: role || '',
+      uploadProgressText: progressText || '',
+      uploadErrorText: errorText || '',
+    })
+  },
+
+  clearUploadFeedback(role) {
+    if (role && this.data.uploadQueueRole && this.data.uploadQueueRole !== role) {
+      return
+    }
+
+    this.syncUploadFeedback('', '', '')
+  },
+
+  handleTapOpenSourceLibrary() {
+    this.openSourcePicker()
+  },
+
+  handleTapUploadSource() {
+    return this.uploadSourceFiles()
+  },
+
+  async uploadSourceFilesLegacy() {
+    if (!ensureLogin() || this.data.uploadingSources) {
+      return
+    }
+
+    try {
+      await this.ensurePrivacyAuthorized('autofill-source-upload', async () => {
+        const pickRes = await chooseMessageFileAsync({
+          count: 10,
+          type: 'file',
+          extension: SOURCE_EXTENSIONS,
+        })
+        const files = Array.isArray(pickRes && pickRes.tempFiles) ? pickRes.tempFiles : []
+        if (files.length <= 0) {
+          return
+        }
+
+        this.setData({ uploadingSources: true })
+        wx.showLoading({
+          title: '正在上传资料',
+          mask: true,
+        })
+
+        let successCount = 0
+        const uploadedIds = []
+
+        for (let index = 0; index < files.length; index += 1) {
+          const file = files[index] || {}
+          const fileName = resolvePickedFileName(file)
+          const filePath = resolvePickedFilePath(file)
+          if (!fileName || !filePath) {
+            continue
+          }
+
+          try {
+            const res = await api.uploadDocument(filePath, fileName)
+            const uploadedDoc = (res && res.data) || res || {}
+            if (uploadedDoc && (uploadedDoc.id || uploadedDoc.id === 0)) {
+              uploadedIds.push(String(uploadedDoc.id))
+              successCount += 1
+            }
+          } catch (err) {
+            // continue uploading remaining files
+          }
+        }
+
+        if (uploadedIds.length > 0) {
+          const selectedDocIds = (this.data.selectedDocIds || [])
+            .concat(uploadedIds)
+            .filter((item, index, list) => list.indexOf(item) === index)
+
+          this.setData({ selectedDocIds })
+        }
+
+        await this.loadSourceDocuments({ silent: true })
+
+        wx.showToast({
+          title: successCount > 0 ? '已上传 ' + successCount + ' 份资料' : '没有成功上传资料',
+          icon: successCount > 0 ? 'success' : 'none',
+        })
+      })
+    } catch (err) {
+      if (isPickerCancelError(err)) {
+        return
+      }
+
+      console.error('[docai][autofill] uploadSourceFiles failed', err)
+      wx.showToast({
+        title: getPickerErrorMessage(err, '资料上传失败'),
+        icon: 'none',
+      })
+    } finally {
+      wx.hideLoading()
+      this.setData({ uploadingSources: false })
+    }
+  },
+
+  handleTapChooseTemplate() {
+    return this.chooseTemplateFile()
+  },
+
+  async chooseTemplateFileLegacy() {
+    if (!ensureLogin()) {
+      return
+    }
+
+    try {
+      await this.ensurePrivacyAuthorized('autofill-template-upload', async () => {
+        const pickRes = await chooseMessageFileAsync({
+          count: 1,
+          type: 'file',
+          extension: TEMPLATE_EXTENSIONS,
+        })
+        const file = (pickRes.tempFiles || [])[0]
+        const fileName = resolvePickedFileName(file)
+        const filePath = resolvePickedFilePath(file)
+        if (!fileName || !filePath) {
+          return
+        }
+
+        const templateName = fileName || '未命名模板'
+        this.setData({
+          templateName,
+          templateLocalPath: filePath,
+          currentTemplate: buildCurrentTemplate(templateName, filePath),
+        })
+
+        this.persistDraft({
+          templateLocalPath: filePath,
+          templateName,
+        })
+      })
+    } catch (err) {
+      if (isPickerCancelError(err)) {
+        return
+      }
+
+      console.error('[docai][autofill] chooseTemplateFile failed', err)
+      wx.showToast({
+        title: getPickerErrorMessage(err, '模板选择失败'),
+        icon: 'none',
+      })
+    }
+  },
+
   async uploadSourceFiles() {
     if (!ensureLogin() || this.data.uploadingSources) {
       return
     }
 
     try {
-      const pickRes = await this.chooseMessageFileAsync({
+      this.setData({ uploadingSources: true })
+      this.syncUploadFeedback('source', '姝ｅ湪鎵撳紑璧勬枡閫夋嫨鈥?', '')
+
+      const selection = await this.ensurePrivacyAuthorized('autofill-source-upload', () => selectLocalFiles({
         count: 10,
-        type: 'file',
-        extension: SOURCE_EXTENSIONS,
-      })
-      const files = Array.isArray(pickRes && pickRes.tempFiles) ? pickRes.tempFiles : []
-      if (files.length <= 0) {
+        allowedExtensions: SOURCE_EXTENSIONS,
+      }))
+      const validFiles = selection.validFiles || []
+      const rejectedIssueTexts = (selection.rejectedFiles || []).map((item) => item.issueText)
+
+      if (!validFiles.length) {
+        this.lastSourceRetryFiles = []
+        this.syncUploadFeedback('source', '', rejectedIssueTexts.join('\n'))
+        wx.showToast({
+          title: rejectedIssueTexts.length ? '鎵€閫夎祫鏂欎笉鍙笂浼?' : '鏈€夋嫨璧勬枡',
+          icon: 'none',
+        })
         return
       }
 
-      this.setData({ uploadingSources: true })
       wx.showLoading({
-        title: '正在上传资料',
+        title: '姝ｅ湪涓婁紶璧勬枡',
         mask: true,
       })
 
-      let successCount = 0
-      const uploadedIds = []
+      const uploadResult = await uploadSelectedFiles(validFiles, {
+        beforeUpload: () => {
+          this.syncUploadFeedback('source', '姝ｅ湪鏍￠獙涓婁紶鏈嶅姟鈥?', rejectedIssueTexts.join('\n'))
+          return api.checkUploadConnection()
+        },
+        uploadOne: (file) => api.uploadDocument(file.path, file.name),
+        failureMessage: '璧勬枡涓婁紶澶辫触',
+        onProgress: ({ index, total, file }) => {
+          wx.showLoading({
+            title: '涓婁紶 ' + (index + 1) + '/' + total,
+            mask: true,
+          })
+          this.syncUploadFeedback(
+            'source',
+            '姝ｅ湪涓婁紶 ' + (index + 1) + '/' + total + '锛?' + (file && file.name ? file.name : ''),
+            rejectedIssueTexts.join('\n')
+          )
+        },
+      })
 
-      for (let index = 0; index < files.length; index += 1) {
-        const file = files[index] || {}
-        const fileName = normalizeText(file.name)
-        const filePath = normalizeText(file.path)
-        if (!fileName || !filePath) {
-          continue
-        }
-
-        try {
-          const res = await api.uploadDocument(filePath, fileName)
-          const uploadedDoc = (res && res.data) || res || {}
-          if (uploadedDoc && (uploadedDoc.id || uploadedDoc.id === 0)) {
-            uploadedIds.push(String(uploadedDoc.id))
-            successCount += 1
+      const uploadedIds = uploadResult.successItems
+        .map((item) => {
+          const response = item && item.response
+          if (!response) {
+            return null
           }
-        } catch (err) {
-          // continue uploading remaining files
-        }
-      }
+
+          return response.data ? response.data.id : response.id
+        })
+        .filter((item) => item || item === 0)
+        .map(String)
 
       if (uploadedIds.length > 0) {
         const selectedDocIds = (this.data.selectedDocIds || [])
@@ -587,20 +872,32 @@ Page({
         this.setData({ selectedDocIds })
       }
 
+      this.lastSourceRetryFiles = uploadResult.failedItems.map((item) => item.file)
+      const issueTexts = rejectedIssueTexts.concat(uploadResult.issueTexts || [])
+      const progressText = uploadResult.successCount > 0
+        ? '宸叉垚鍔熶笂浼? ' + uploadResult.successCount + ' 浠借祫鏂欙紝鍙户缁敤浜庢湰娆″～琛ㄣ€?'
+        : ''
+
+      this.syncUploadFeedback('source', progressText, issueTexts.join('\n'))
       await this.loadSourceDocuments({ silent: true })
 
       wx.showToast({
-        title: successCount > 0 ? '已上传 ' + successCount + ' 份资料' : '没有成功上传资料',
-        icon: successCount > 0 ? 'success' : 'none',
+        title: uploadResult.successCount > 0
+          ? (issueTexts.length ? '璧勬枡宸查儴鍒嗕笂浼?' : '璧勬枡涓婁紶鎴愬姛')
+          : '娌℃湁鎴愬姛涓婁紶璧勬枡',
+        icon: uploadResult.successCount > 0 ? 'success' : 'none',
       })
     } catch (err) {
-      const message = String((err && err.errMsg) || (err && err.message) || '')
-      if (message.indexOf('cancel') === -1) {
-        wx.showToast({
-          title: trimErrorMessage(message, '资料上传失败'),
-          icon: 'none',
-        })
+      if (isPickerCancelError(err)) {
+        return
       }
+
+      console.error('[docai][autofill] uploadSourceFiles failed', err)
+      this.syncUploadFeedback('source', '', getPickerErrorMessage(err, '璧勬枡涓婁紶澶辫触'))
+      wx.showToast({
+        title: getPickerErrorMessage(err, '璧勬枡涓婁紶澶辫触'),
+        icon: 'none',
+      })
     } finally {
       wx.hideLoading()
       this.setData({ uploadingSources: false })
@@ -613,33 +910,54 @@ Page({
     }
 
     try {
-      const pickRes = await this.chooseMessageFileAsync({
+      this.syncUploadFeedback('template', '姝ｅ湪鎵撳紑妯℃澘閫夋嫨鈥?', '')
+
+      const selection = await this.ensurePrivacyAuthorized('autofill-template-upload', () => selectLocalFiles({
         count: 1,
-        type: 'file',
-        extension: TEMPLATE_EXTENSIONS,
-      })
-      const file = (pickRes.tempFiles || [])[0]
-      if (!file || !file.path) {
+        allowedExtensions: TEMPLATE_EXTENSIONS,
+      }))
+      const file = (selection.validFiles || [])[0]
+      const rejectedIssueTexts = (selection.rejectedFiles || []).map((item) => item.issueText)
+
+      if (!file) {
+        this.syncUploadFeedback('template', '', rejectedIssueTexts.join('\n'))
+        wx.showToast({
+          title: rejectedIssueTexts.length ? '鎵€閫夋ā鏉夸笉鍙娇鐢?' : '鏈€夋嫨妯℃澘',
+          icon: 'none',
+        })
         return
       }
 
+      const templateName = file.name || '鏈懡鍚嶆ā鏉?'
+      const filePath = file.path || ''
+
       this.setData({
-        templateName: file.name || '未命名模板',
-        templateLocalPath: file.path,
+        templateName,
+        templateLocalPath: filePath,
+        currentTemplate: buildCurrentTemplate(templateName, filePath),
       })
 
       this.persistDraft({
-        templateLocalPath: file.path,
-        templateName: file.name || '未命名模板',
+        templateLocalPath: filePath,
+        templateName,
       })
+
+      this.syncUploadFeedback(
+        'template',
+        '妯℃澘宸查€夋嫨锛屽紑濮嬫櫤鑳藉～琛ㄦ椂浼氳嚜鍔ㄤ笂浼犲埌 DocAI銆?',
+        rejectedIssueTexts.join('\n')
+      )
     } catch (err) {
-      const message = String((err && err.errMsg) || (err && err.message) || '')
-      if (message.indexOf('cancel') === -1) {
-        wx.showToast({
-          title: trimErrorMessage(message, '模板选择失败'),
-          icon: 'none',
-        })
+      if (isPickerCancelError(err)) {
+        return
       }
+
+      console.error('[docai][autofill] chooseTemplateFile failed', err)
+      this.syncUploadFeedback('template', '', getPickerErrorMessage(err, '妯℃澘閫夋嫨澶辫触'))
+      wx.showToast({
+        title: getPickerErrorMessage(err, '妯℃澘閫夋嫨澶辫触'),
+        icon: 'none',
+      })
     }
   },
 
@@ -647,18 +965,31 @@ Page({
     this.setData({
       templateName: '',
       templateLocalPath: '',
+      currentTemplate: null,
     })
 
     this.persistDraft({
       templateLocalPath: '',
       templateName: '',
     })
+    this.clearUploadFeedback('template')
+  },
+
+  clearCurrentTemplate() {
+    this.clearTemplateFile()
   },
 
   handleRequirementInput(e) {
     const userRequirement = String((e.detail && e.detail.value) || '')
-    this.setData({ userRequirement })
+    this.setData({
+      userRequirement,
+      requirementText: userRequirement,
+    })
     this.persistDraft({ userRequirement })
+  },
+
+  removeSelectedSourceDoc(e) {
+    this.removeSelectedSource(e)
   },
 
   async showModalAsync(options) {
@@ -759,7 +1090,13 @@ Page({
         progressText: '资料校验完成，正在上传模板文件…',
       })
 
-      const uploadRes = await api.uploadTemplateFile(this.data.templateLocalPath, this.data.templateName)
+      const uploadRes = await this.ensurePrivacyAuthorized(
+        'autofill-template-upload',
+        async () => {
+          await api.checkUploadConnection()
+          return api.uploadTemplateFile(this.data.templateLocalPath, this.data.templateName)
+        }
+      )
       const templateInfo = (uploadRes && uploadRes.data) || uploadRes || {}
       const templateId = String((templateInfo.id || templateInfo.templateId || ''))
       if (!templateId) {

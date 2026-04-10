@@ -1,21 +1,14 @@
 {
-  "name": "miniprogram-demo",
+  "name": "docai-miniprogram",
   "version": "1.0.0",
-  "description": "WeChat miniprogram demo",
+  "description": "DocAI WeChat miniprogram",
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint miniprogram/app.js miniprogram/config.js miniprogram/api miniprogram/utils miniprogram/pages/docai/login miniprogram/pages/docai/dashboard miniprogram/pages/docai/documents miniprogram/pages/docai/autofill miniprogram/pages/docai/chat miniprogram/pages/docai/profile miniprogram/pages/legal miniprogram/pages/account-security miniprogram/pages/contact miniprogram/pages/about --ext .js",
+    "lint:fix": "npm.cmd run lint -- --fix"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/wechat-miniprogram/miniprogram-demo.git"
-  },
-  "author": "wechat-miniprogram",
+  "author": "DocAI",
   "license": "MIT",
   "private": true,
-  "bugs": {
-    "url": "https://github.com/wechat-miniprogram/miniprogram-demo/issues"
-  },
-  "homepage": "https://github.com/wechat-miniprogram/miniprogram-demo#readme",
   "devDependencies": {
     "eslint": "^5.5.0",
     "eslint-config-airbnb-base": "13.1.0",

@@ -33,6 +33,14 @@
 - **后端端点**: `POST /users/logout`
 - **前端映射**: `POST /users/logout` ✓
 
+### deleteCurrentUserAccount
+- **后端端点**: `DELETE /users/account`
+- **前端映射**: `DELETE /users/account` ✓
+- **预期行为**:
+  - 删除当前登录用户账号记录
+  - 级联删除当前账号关联文档、会话、模板结果等业务数据
+  - 注销成功后当前 token 失效
+
 ## 3. 源文档管理 API
 ### getSourceDocuments
 - **后端端点**: `GET /source/documents`
